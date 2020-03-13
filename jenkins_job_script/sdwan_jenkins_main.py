@@ -11,7 +11,7 @@ def main(parser):
 
     try:
         job_process.init_env()
-        #job_process.check_test_plan()
+        job_process.check_test_plan()
         job_process.run_test_plan()
         #job_process.save_snapshot()
 
