@@ -61,7 +61,7 @@ class Cpe_Cli(SSHLibrary):
                 logger.warn('Download from %s failed' % url)
             if re.search(r'Closing all shell sessions',output[0]):
                 time.sleep(15)
-                cpe_connection=self._ping_cpe(current_host)
+                cpe_connection=self._ping_device(current_host)
                 if cpe_connection==1:
                     logger.info('ping cpe success, checking image version of cpe...')
                     self.open_connection(current_host)
@@ -72,8 +72,8 @@ class Cpe_Cli(SSHLibrary):
         except Exception as e:
             logger.warn(e)
 
-    def _ping_cpe(self,host,total=30):
-        logger.info('ping cpe with host ip: %s' % host)
+    def _ping_device(self,host,total=30):
+        logger.info('ping device with host ip: %s' % host)
         ping_cmd='ping -c5 -W50 %s' % host 
         #logger.info(ping_cmd)
         count=1
@@ -134,3 +134,62 @@ class Cpe_Cli(SSHLibrary):
         except Exception as e:
             logger.warn(e)
 
+    
+    def get_rpi_interface_ip(self,interface="eth0"):
+        """Get the specific ip of Raspberry Pi 
+
+        :param str interface: default is 'eth0', dynamic ip which is allocated by CPE
+
+        :returns str: IP address of the interface
+        
+        example::
+        | ${eth0_ip} | get rpi interface ip |
+        | ${eth1_ip} | get rpi interface ip | eth1 |
+        """
+        output = self.current.execute_command('ifconfig %s' % interface)
+        inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
+        #print(output[0],type(output[0]))
+        if inet:
+            return inet.group().split(' ')[1]
+        else:
+            logger.warn('Can not get ip address for interface %s' % interface)
+
+
+    def reset_rpi_interface_ip(self,interface='eth0'):
+        """Reset the specific interface ip of Respberry Pi
+
+        :param str interface: default is 'eth0',dynamic ip allocated by CPE
+
+        :returns str: IP address of the interface after reset interface
+        
+        example::
+        | ${eth0_ip} | reset rpi interface ip |
+        """
+        self.current.execute_command('ifconfig %s down' % interface)
+        output = self.current.execute_command('ifconfig %s' % interface)
+        inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
+        if inet:
+            logger.warn('Fail to down interface %s!' % interface)
+        else:
+            logger.info('interface %s is down, reset procedure is on going' % interface)
+            self.current.execute_command('ifconfig %s up' % interface)
+            time.sleep(1)
+            output = self.current.execute_command('ifconfig %s' % interface)
+            inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
+            if inet:
+                logger.info('interface %s is up' % interface)
+                ip = inet.group().split(' ')[1]
+                logger.info('Get interface ip >> %s' % ip)
+                br_lan = ip.split('.')[:-1]
+                br_lan.append('1')
+                br_lan = '.'.join(br_lan)
+                res = self.current.execute_command('ping -c5 -W50 %s' % br_lan)
+                if re.search(r'5 packets transmitted, 5 received',res[0]):
+                    logger.info('Ping br-lan %s ok' % br_lan)
+                    return ip
+                else:
+                    logger.warn('Ping br-lan %s fail, re-process reset %s' % (br_lan,interface))
+                    self.reset_rpi_interface_ip(interface)
+            else:
+                logger.warn('interface %s reset fail!' % interface)
+        
