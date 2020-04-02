@@ -31,6 +31,7 @@ class API_Test_Lib(object):
         self.timeout = 150       # Default time for all the API calls
         self._ssl_verify = False      # default as true
         self._device_mgmt_id =  None
+        self._current_cpe_id = None
         #self._imapObj = ImapLibrary()    # Instantiate the Imap library clas
 
 
@@ -112,6 +113,7 @@ class API_Test_Lib(object):
         self._user = user
         self._password = pwd
         self.base_url = base_url
+
         
         coki = self._get_cookie(user, pwd, url= self.base_url)
         logger.console('cookie =  %s'% (coki))
@@ -125,6 +127,7 @@ class API_Test_Lib(object):
         
 
         self._session = requests.Session()   ## create a seesion
+
     
 
     
@@ -227,7 +230,7 @@ class API_Test_Lib(object):
         | ${status_code}  ${jdata}= | Get_Request | /proxy/major/api/agents?upperRelationId.equals=0&sort=id,desc&page=0&size=999 |
         """
 
-        redir = True if allow_redirects is None else allow_redirects
+        #redir = True if allow_redirects is None else allow_redirects
 
         uri = self._get_url(resource)
         logger.info(uri)
@@ -461,6 +464,36 @@ class API_Test_Lib(object):
                 except Exception as e:
                         logger.warn(e)
                         logger.warn('can not get id')
+
+    
+
+    def get_cpe_matches(self,cpe_list,pattern):
+        """Return a specific cpe dict from cpe_list
+
+        :param list cpe_list: cpe_list which get form content
+
+        :param str pattern: locate a specific cpe by its unique characteristic such as 'sn'/'id'
+
+        :return dict: a dict contain all info about the cpe
+
+        example::
+        | ${cpe_dict} | get cpe matches | ${cpe_list} | sn=E201202003261007 |
+        """
+        target_cpe={}
+        if pattern:
+            key,value = pattern.split('=')   
+            key = key.strip()
+            value = value.strip()
+            logger.info('get cpe matches "%s = %s" from cpe list' % (key,value))
+
+        for cpe in cpe_list:
+            if cpe[key] == value:
+                self._current_cpe_id = cpe['id']
+                target_cpe = cpe
+        return target_cpe
+
+
+
                                 
 
 
@@ -509,13 +542,11 @@ class API_Test_Lib(object):
         '''
         if uri:
             slash = '' if uri.startswith('/') else '/'
-
-        logger.info("_get_url")
-        logger.info('Base_url:  %s'% (self.base_url), also_console=True)
+        #logger.info('Base_url:  %s' % (self.base_url), also_console=True)
 
         url = "%s%s%s" %(self.base_url, slash, uri)
 
-        logger.info('Full API URL -->  %s'% (url), also_console=True)
+        logger.info('Full API URL >>  %s'% (url), also_console=True)
 
         self.current_URL = url
         return url
@@ -540,11 +571,94 @@ class API_Test_Lib(object):
     def _post_multiple_multipart_encoded_files(self,uri, files_dict):
         pass
 
+    def _load_json_file(self,file_path):
+        """Load a json file to a python dict"""
+        with open(file_path,'r') as f:
+            item = json.load(f)
+            return item
+
+    def _dump_to_json(self,py_dict):
+        """Dump a python dict type content to jsondata(str) type"""
+        jsondata = json.dumps(py_dict)
+        return jsondata
+
+    def update_jsondata_from_jsonfile(self,filename,main_key=None,cpe_id='',**kws):
+        """Build payload jsondata from the pre-defined jsondata file.
+
+        :param str filename: jsondata file name, including the path of file
+
+        :param kws: key/value pairs for updating the data in the jsonfile
+
+        :param str main_key: if there's multiple same key-value pairs exist, an up level key need to be specified
+
+        :return str jsondata: jsondata after update
+
+        example::
+        | ${proto} | set variable | dhcp |
+        | ${payload} | update jsondata from jsonfile | /home/sdwan/Test/RF_Lib/API_Test_Lib/wan_config.json | proto=${proto} |
+        if multiple same keys exist such as wan_config.json for instance, 
+        'lte' and 'wan0' has just the same format of values, specified the value group you want to modify:
+        | ${proto} | set variable | dhcp |
+        | ${payload} | update jsondata from jsonfile | ${File_directory}/wan_config.json | wan0 | proto=${proto} | mtu=1500 |
+        or user_defined cpe_id instead of the current_cpe_id to modify:
+        | ${payload} | update jsondata from jsonfile | ${File_directory}/wan_config.json | wan0 | ${cpe_id} | proto=${proto} |
+        """
+        if filename and os.path.exists(filename):
+            jsondata = self._load_json_file(filename)
+
+            if not cpe_id:
+                cpe_id = self._current_cpe_id
+            
+            jsondata['id'] = cpe_id
+            logger.info('parameter of cpe_id %s is perpared to be modified' % cpe_id)
+
+            if kws:
+                logger.info('updata parameter %s' % kws)
+                for key_param in kws:
+                    value_param = kws[key_param]
+                    jsondata = self.update_jsondata_by_key_value_pair(jsondata,key_param,value_param,main_key)
+                payload = json.dumps(jsondata)
+            return payload
+        else:
+            logger.warn('filename %s is illegal, check if file exists!' % filename)
+            raise AssertionError('fail to get json file %s ' % filename)
+    
+    def update_jsondata_by_key_value_pair(self,jsondata,key,value,main_key):
+        """Update jsondata by given key-value pair
+
+        :param dict jsondata: python dict type of jsondata
+
+        :param str key: target key to update
+
+        :param str value: target value to update
+
+        :param str main_key: an up level key to allocated the target key if needed, default is None
+
+        :return dict jsondata: jsondata after updated
+        """
+        tmp = jsondata
+        for k,v in tmp.items():
+            
+            if main_key == None and k == key:
+                tmp[k] = value
+            elif main_key and k == main_key:
+                v[key] = value
+            else:
+                if isinstance(v,dict):
+                    self.update_jsondata_by_key_value_pair(v,key,value,main_key)
+                elif isinstance(v,(list,tuple)):
+                    for content in v :
+                        self.update_jsondata_by_key_value_pair(content,key,value,main_key)
+        return tmp
+            
+
+
+
 
 
 if __name__=='__main__':
     test=API_Test_Lib()
-    test.create_api_test_environment("admin","sdwan123!@#","http://admin.dev.linksdwan.com")
+    #test.create_api_test_environment("admin","sdwan123!@#","http://admin.dev.linksdwan.com")
     #print(test.create_api_test_environment("admin","sdwan123!@#","http://admin.dev.linksdwan.com"))
     #print(test.get_request('/proxy/major/api/agents','upperRelationId.equals=0&sort=id,desc&page=0&size=999'))
     #payloads={"name":"pop_test","country":"中国","province":"云南省","city":"临沧市","latitude":"23.8878061038","longitude":"100.092612914","details":"del later"}
@@ -555,3 +669,7 @@ if __name__=='__main__':
     #print(test.put_request('proxy/major/api/pops',data=payload))
     #r=test.post_multipart_encoded_files_toolbelt(resource="/proxy/major/api/equipment/import",file_paths_dict={"/home/sdwan/Test/Test/sn.xlsx":"text/xlsx"})
     #print(r)
+    #file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/wan_config.json'
+    #modify={'proto':'dhcp','mtu':'1500'}
+    #item=test.update_jsondata_from_jsonfile(file_path,'wan0',modify)
+    
