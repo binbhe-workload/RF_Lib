@@ -118,6 +118,7 @@ class API_Test_Lib(object):
         coki = self._get_cookie(user, pwd, url= self.base_url)
         logger.console('cookie =  %s'% (coki))
 
+
         
         #tok = self._get_csrf_token()
         #logger.info('token =   %s'% (tok))
@@ -213,7 +214,7 @@ class API_Test_Lib(object):
 
 
     
-    def get_request(self, resource, params={}, expected_failure=False, allow_redirects=None, timeout_input=60,json_response=True):
+    def get_request(self, resource, params=None, expected_failure=False, allow_redirects=None, timeout_input=60,json_response=True):
         """Wrapper for HTTP GET request API call.
 
         :param resource: resource specified by swaggeer such as: /proxy/major/api/agents
@@ -266,8 +267,8 @@ class API_Test_Lib(object):
     
 
    
-    def put_request(self, resource, data=None, content_type='application/json;charset=utf-8', no_response_content=False,
-                    expected_failure=False, timeout_input=60):
+    def put_request(self, resource, data=None, content_type='application/json;charset=utf-8', params=None,
+                    no_response_content=False,expected_failure=False, timeout_input=60):
         """Wrapper method for HTTP PUT Request.
 
         :param str resource: resource specified by swaggeer
@@ -300,12 +301,15 @@ class API_Test_Lib(object):
 
         ## build the request headers,pwd
         put_headers = self._build_headers_by_content_type(content_type)
+        #logger.info('params: %s,type %s' % (params,type(params)))
+        
 
         if type(data)!=str:
             data=json.dumps(data)
 
         resp = self._session.put(self._get_url(resource),
                                  data=data,
+                                 params=params,
                                  headers=put_headers,
                                  verify=self._ssl_verify,
                                  timeout=timeout_input)
@@ -608,8 +612,8 @@ class API_Test_Lib(object):
 
             if not cpe_id:
                 cpe_id = self._current_cpe_id
-            
-            jsondata['id'] = cpe_id
+            if 'id' in jsondata.keys():
+                jsondata['id'] = cpe_id
             logger.info('parameter of cpe_id %s is perpared to be modified' % cpe_id)
 
             if kws:
@@ -651,6 +655,23 @@ class API_Test_Lib(object):
                         self.update_jsondata_by_key_value_pair(content,key,value,main_key)
         return tmp
             
+    def get_value_from_jsondata(self,jsondata,key,value=[]):
+        """Get value from jsondata by given key"""
+        
+        if key in jsondata.keys():
+            value.append(jsondata[key])
+            #logger.warn('value = %s' % value)
+        else:
+            for v in jsondata.values():
+                if isinstance(v,dict):
+                    
+                    self.get_value_from_jsondata(v,key,value)
+                if isinstance(v,(list,tuple)):
+                    for content in v:
+                        self.get_value_from_jsondata(content,key,value)
+        return value[0]
+        
+
 
 
 

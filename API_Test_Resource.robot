@@ -32,3 +32,14 @@ cpe_wan_config_modify
     ${status_code}    ${jsondata}    put request    proxy/major/api/equipment/configDraft    ${payload}    application/json
     should be equal    ${status_code}    ${200}
     should contain    ${jsondata}    保存成功
+
+active_cpe_config
+    [Arguments]    ${cpe_id}
+    ${file_path}    set variable    /home/sdwan/Test/RF_Lib/API_Test_Lib/active_cpe_config.json
+    ${payload}    update jsondata from jsonfile    ${file_path}    equipmentId=${cpe_id}
+    ${status_code}    ${jsondata}    put request    proxy/major/api/equipment/configDraft/apply?equipmentId=${cpe_id}    content_type=${none}    params=${payload}
+    should be equal    ${status_code}    ${200}
+    sleep    2
+    ${responce_code}    ${jdata}    get request    proxy/configuration/api/device-config-histories?size=10&page=0&sort=id,desc&queryCondition=${jsondata}
+    ${status}    get value from jsondata    ${jdata}    status
+    should be equal    ${status}    SUCCESS
