@@ -39,7 +39,10 @@ active_cpe_config
     ${payload}    update jsondata from jsonfile    ${file_path}    equipmentId=${cpe_id}
     ${status_code}    ${jsondata}    put request    proxy/major/api/equipment/configDraft/apply?equipmentId=${cpe_id}    content_type=${none}    params=${payload}
     should be equal    ${status_code}    ${200}
-    sleep    2
-    ${responce_code}    ${jdata}    get request    proxy/configuration/api/device-config-histories?size=10&page=0&sort=id,desc&queryCondition=${jsondata}
-    ${status}    get value from jsondata    ${jdata}    status
+    FOR    ${one}    IN RANGE    10
+        sleep    1
+        ${responce_code}    ${jdata}    get request    proxy/configuration/api/device-config-histories?size=10&page=0&sort=id,desc&queryCondition=${jsondata}
+        ${status}    get value from jsondata    ${jdata}    status
+        Exit For Loop If    ${status}=="SUCCESS"
+    END
     should be equal    ${status}    SUCCESS

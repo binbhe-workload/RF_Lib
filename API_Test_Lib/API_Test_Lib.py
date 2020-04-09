@@ -586,7 +586,7 @@ class API_Test_Lib(object):
         jsondata = json.dumps(py_dict)
         return jsondata
 
-    def update_jsondata_from_jsonfile(self,filename,main_key=None,cpe_id='',**kws):
+    def _update_jsondata_from_jsonfile(self,filename,main_key=None,cpe_id='',**kws):
         """Build payload jsondata from the pre-defined jsondata file.
 
         :param str filename: jsondata file name, including the path of file
@@ -626,8 +626,69 @@ class API_Test_Lib(object):
         else:
             logger.warn('filename %s is illegal, check if file exists!' % filename)
             raise AssertionError('fail to get json file %s ' % filename)
+
+    def update_jsondata_from_jsonfile(self,filename,cpe_id='',**kws):
+        """Build payload jsondata from the pre-defined jsondata file.
+
+        :param str filename: jsondata file name, including the path of file
+
+        :param kws: key/value pairs for updating the data in the jsonfile
+
+        :return str jsondata: jsondata after update
+
+        example::
+        | ${proto} | set variable | dhcp |
+        | ${payload} | update jsondata from jsonfile | /home/sdwan/Test/RF_Lib/API_Test_Lib/wan_config.json | proto=${proto} |
+        if multiple same keys exist such as wan_config.json for instance, 
+        'lte' and 'wan0' has just the same format of values, specified the value group you want to modify:
+        | ${proto} | set variable | dhcp |
+        | ${payload} | update jsondata from jsonfile | ${File_directory}/wan_config.json | wan0.proto=${proto} | wan0.mtu=1500 |
+        or user_defined cpe_id instead of the current_cpe_id to modify:
+        | ${payload} | update jsondata from jsonfile | ${File_directory}/wan_config.json | ${cpe_id} | wan0.proto=${proto} |
+        """
+        if filename and os.path.exists(filename):
+            jsondata = self._load_json_file(filename)
+
+            if not cpe_id:
+                cpe_id = self._current_cpe_id
+            if 'id' in jsondata.keys():
+                jsondata['id'] = cpe_id
+            logger.info('parameter of cpe_id %s is perpared to be modified' % cpe_id)
+
+            if kws:
+                logger.info('updata parameter %s' % kws)
+                for key_param in kws:
+                    value_param = kws[key_param]                    
+                    if '.' in key_param:
+                        key_list = key_param.split('.')
+                        jsondata = self._update_jsondata_by_key_list(jsondata,key_list,value_param)
+                    else: 
+                        jsondata = self.update_jsondata_by_key_value_pair(jsondata,key_param,value_param)
+                #payload = json.dumps(jsondata)
+            return json.dumps(jsondata)
+        else:
+            logger.warn('filename %s is illegal, check if file exists!' % filename)
+            raise AssertionError('fail to get json file %s ' % filename)
     
-    def update_jsondata_by_key_value_pair(self,jsondata,key,value,main_key):
+    def _update_jsondata_by_key_list(self,jsondata,key_list,value):
+        """Update jsondata by key_list which is sorted already"""
+        
+        target_key = key_list[-1]
+        for k,v in jsondata.items():
+            if k == key_list[0] and len(key_list) != 2:                
+                key_list.pop(0)
+                jsondata[k]=self._update_jsondata_by_key_list(v,key_list,value)
+            elif k == key_list[0] and len(key_list) == 2:                
+                v[target_key] = value                
+            else:
+                if isinstance(v,dict):
+                    self._update_jsondata_by_key_list(v,key_list,value)
+
+        return jsondata
+
+
+    
+    def update_jsondata_by_key_value_pair(self,jsondata,key,value,main_key=None):
         """Update jsondata by given key-value pair
 
         :param dict jsondata: python dict type of jsondata
@@ -635,8 +696,6 @@ class API_Test_Lib(object):
         :param str key: target key to update
 
         :param str value: target value to update
-
-        :param str main_key: an up level key to allocated the target key if needed, default is None
 
         :return dict jsondata: jsondata after updated
         """
@@ -656,7 +715,12 @@ class API_Test_Lib(object):
         return tmp
             
     def get_value_from_jsondata(self,jsondata,key,value=[]):
-        """Get value from jsondata by given key"""
+        """Get value from jsondata by given key
+
+        example::
+        | ${status} | get value from jsondata by given key | ${jsondata} | status |
+        
+        """
         
         if key in jsondata.keys():
             value.append(jsondata[key])
@@ -670,6 +734,9 @@ class API_Test_Lib(object):
                     for content in v:
                         self.get_value_from_jsondata(content,key,value)
         return value[0]
+
+
+
         
 
 
@@ -690,7 +757,7 @@ if __name__=='__main__':
     #print(test.put_request('proxy/major/api/pops',data=payload))
     #r=test.post_multipart_encoded_files_toolbelt(resource="/proxy/major/api/equipment/import",file_paths_dict={"/home/sdwan/Test/Test/sn.xlsx":"text/xlsx"})
     #print(r)
-    #file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/wan_config.json'
-    #modify={'proto':'dhcp','mtu':'1500'}
-    #item=test.update_jsondata_from_jsonfile(file_path,'wan0',modify)
-    
+    file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/wan_config.json'
+    modify={'wan0.proto':'dhcp','wan0.mtu':'1500'}
+    item=test.update_jsondata_from_jsonfile(file_path,kws=modify)
+    print(item)
