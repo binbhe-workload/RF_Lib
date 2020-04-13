@@ -735,9 +735,58 @@ class API_Test_Lib(object):
                         self.get_value_from_jsondata(content,key,value)
         return value[0]
 
+    def update_firewall_payload_from_file(self,filename,key,cpe_id=''):
+        """ Update firewall config json file to payload with given random index
 
+        :param str filename: firewall config json file to be updated
 
+        :param str key: target random key given by user
+
+        :param str cpe_id: user specific cpe_id instead of current cpe id get from get_cpe_status
+
+        :return dict payload: return updated payload
         
+        example::
+        | ${payload} | update firewall payload from file | ${File_directory}/firewall_config.json | 1584341013552000000 |
+        """
+        if filename and os.path.exists(filename):
+            jsondata = self._load_json_file(filename)
+
+            if cpe_id:
+                jsodata['id'] = cpe_id
+            else:
+                jsondata['id'] = self._current_cpe_id
+            try:
+                ids_rule = jsondata['details']['firewall']['ids_rule']
+                
+                ids_rule[key] = ids_rule.pop('random_index')
+                logger.info('update firewall jsondata >> %s' % jsondata)
+                return jsondata
+            except Exception as e:
+                print(e)
+        else:
+            logger.warn('Invalid filename %s , check if file exists!' % filename)
+            raise AssertionError('Fail to load jsonfile %s' % filename)
+
+    def update_jsondata(self,jsondata,**kws):
+        """Build a payload by updating given jsondata and key/value pairs
+
+        :param dict jsondata: given jsondata to be updated
+
+        :param kws: key/value pairs to be updated
+
+        example::
+        | ${payload} | updata jsondata | ${jsondata} | dstIp=${dstIp} | srcIp=${srcIp} |
+        """
+        if kws and isinstance(jsondata,dict):
+            for key,value in kws.items():
+                payload = self.update_jsondata_by_key_value_pair(jsondata,key,value)
+            return json.dumps(payload)
+
+
+
+
+
 
 
 
@@ -757,7 +806,6 @@ if __name__=='__main__':
     #print(test.put_request('proxy/major/api/pops',data=payload))
     #r=test.post_multipart_encoded_files_toolbelt(resource="/proxy/major/api/equipment/import",file_paths_dict={"/home/sdwan/Test/Test/sn.xlsx":"text/xlsx"})
     #print(r)
-    file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/wan_config.json'
-    modify={'wan0.proto':'dhcp','wan0.mtu':'1500'}
-    item=test.update_jsondata_from_jsonfile(file_path,kws=modify)
-    print(item)
+    #file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/firewall_config.json'
+    #modify={'wan0.proto':'dhcp','wan0.mtu':'1500'}
+    #test.update_jsondata_from_jsonfile()
