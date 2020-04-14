@@ -735,33 +735,40 @@ class API_Test_Lib(object):
                         self.get_value_from_jsondata(content,key,value)
         return value[0]
 
-    def update_firewall_payload_from_file(self,filename,key,cpe_id=''):
+    def update_firewall_payload_from_file(self,filename,*args):
         """ Update firewall config json file to payload with given random index
 
         :param str filename: firewall config json file to be updated
 
-        :param str key: target random key given by user
-
-        :param str cpe_id: user specific cpe_id instead of current cpe id get from get_cpe_status
+        :param args: 
 
         :return dict payload: return updated payload
         
         example::
-        | ${payload} | update firewall payload from file | ${File_directory}/firewall_config.json | 1584341013552000000 |
+        | ${payload} | update firewall payload from file | ${File_directory}/firewall_config.json | ids_rule.${random_num1} |ids_dnat.${random_num2} |
         """
         if filename and os.path.exists(filename):
             jsondata = self._load_json_file(filename)
+            jsondata['id'] = self._current_cpe_id
 
-            if cpe_id:
-                jsodata['id'] = cpe_id
-            else:
-                jsondata['id'] = self._current_cpe_id
             try:
                 ids_rule = jsondata['details']['firewall']['ids_rule']
+                ids_dnat = jsondata['details']['firewall']['ids_dnat']
                 
-                ids_rule[key] = ids_rule.pop('random_index')
+                rule_value = ids_rule.pop('random_index')
+                dnat_value = ids_dnat.pop('random_index')
+                for item in args:
+                    main_key,key = item.split('.')
+                    main_key = main_key.strip()
+                    key = key.strip()
+                    if main_key == 'ids_rule':
+                        ids_rule[key] = rule_value
+                    if main_key == 'ids_dnat':
+                        ids_dnat[key] = dnat_value
+
                 logger.info('update firewall jsondata >> %s' % jsondata)
                 return jsondata
+
             except Exception as e:
                 print(e)
         else:
@@ -776,11 +783,17 @@ class API_Test_Lib(object):
         :param kws: key/value pairs to be updated
 
         example::
-        | ${payload} | updata jsondata | ${jsondata} | dstIp=${dstIp} | srcIp=${srcIp} |
+        | ${payload} | update jsondata | ${jsondata} | dstIp=${dstIp} | srcIp=${srcIp} |
+        or:
+        | ${payload} | update jsondata | ${jsondata} | ${random_num1}.protocol=any | ${random_num2}.protocol=tcp |
         """
         if kws and isinstance(jsondata,dict):
             for key,value in kws.items():
-                payload = self.update_jsondata_by_key_value_pair(jsondata,key,value)
+                if '.' in key:
+                    key_list = key.split('.')
+                    payload = self._update_jsondata_by_key_list(jsondata,key_list,value)
+                else:
+                    payload = self.update_jsondata_by_key_value_pair(jsondata,key,value)
             return json.dumps(payload)
 
 
@@ -806,6 +819,7 @@ if __name__=='__main__':
     #print(test.put_request('proxy/major/api/pops',data=payload))
     #r=test.post_multipart_encoded_files_toolbelt(resource="/proxy/major/api/equipment/import",file_paths_dict={"/home/sdwan/Test/Test/sn.xlsx":"text/xlsx"})
     #print(r)
-    #file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/firewall_config.json'
+    file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/firewall_config.json'
     #modify={'wan0.proto':'dhcp','wan0.mtu':'1500'}
-    #test.update_jsondata_from_jsonfile()
+    item=test.update_firewall_payload_from_file(file_path,'ids_dnat.1584341013552000000','ids_rule.1584341013551000000')
+    print(item)
