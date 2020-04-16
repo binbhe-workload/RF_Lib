@@ -721,7 +721,8 @@ class API_Test_Lib(object):
         
         if key in jsondata.keys():
             value.append(jsondata[key])
-            #logger.warn('value = %s' % value)
+            logger.warn('value = %s' % value)
+            
         else:
             for v in jsondata.values():
                 if isinstance(v,dict):                    
@@ -731,12 +732,12 @@ class API_Test_Lib(object):
                         self.get_value_from_jsondata(content,key,value)
         return value[-1]
 
-    def update_firewall_payload_from_file(self,filename,*args):
-        """ Update firewall config json file to payload with given random index
+    def update_jsonfile_by_add_rules(self,filename,*args):
+        """ Update config json file to payload with given random index
 
-        :param str filename: firewall config json file to be updated
+        :param str filename: config json file to be updated
 
-        :param args: 
+        :param args: given rules index to be added
 
         :return dict payload: return updated payload
         
@@ -748,21 +749,15 @@ class API_Test_Lib(object):
             jsondata['id'] = self._current_cpe_id
 
             try:
-                ids_rule = jsondata['details']['firewall']['ids_rule']
-                ids_dnat = jsondata['details']['firewall']['ids_dnat']
-                
-                rule_value = ids_rule.pop('random_index')
-                dnat_value = ids_dnat.pop('random_index')
+
                 for item in args:
                     main_key,key = item.split('.')
                     main_key = main_key.strip()
                     key = key.strip()
-                    if main_key == 'ids_rule':
-                        ids_rule[key] = rule_value
-                    if main_key == 'ids_dnat':
-                        ids_dnat[key] = dnat_value
 
-                logger.info('update firewall jsondata >> %s' % jsondata)
+                    self._add_rules_to_jsondata(jsondata,main_key,key)
+
+                logger.info('update jsondata by adding rules>> %s' % jsondata)
                 return jsondata
 
             except Exception as e:
@@ -770,6 +765,17 @@ class API_Test_Lib(object):
         else:
             logger.warn('Invalid filename %s , check if file exists!' % filename)
             raise AssertionError('Fail to load jsonfile %s' % filename)
+
+    def _add_rules_to_jsondata(self,jsondata,main_key,key):
+        
+        if main_key in jsondata.keys():
+            value = jsondata[main_key].pop('random_index')
+            jsondata[main_key][key] = value
+        else:
+            for v in jsondata.values():
+                if isinstance(v,dict):
+                    self._add_rules_to_jsondata(v,main_key,key)
+
 
     def update_jsondata(self,jsondata,**kws):
         """Build a payload by updating given jsondata and key/value pairs
@@ -817,5 +823,5 @@ if __name__=='__main__':
     #print(r)
     file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/firewall_config.json'
     #modify={'wan0.proto':'dhcp','wan0.mtu':'1500'}
-    item=test.update_firewall_payload_from_file(file_path,'ids_dnat.1584341013552000000','ids_rule.1584341013551000000')
+    item=test.update_jsonfile_by_add_rules(file_path,'ids_dnat.1584341013552000000','ids_rule.1584341013551000000')
     print(item)
