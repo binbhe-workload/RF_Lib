@@ -399,11 +399,8 @@ class API_Test_Lib(object):
 
         ## For Debugging only
         last_response_headers = self.get_last_response_headers()
-       # print 'last_response_headers["Set-Cookie"]:  '
-        #print  last_response_headers["Set-Cookie"]
         last_response_cookies =  self._session.last_resp.cookies      #A CookieJar of Cookies the server sent back.
-       # print   "Last response cookies:  "
-       # print   last_response_cookies
+
         cookies_jar = self._session.cookies
         cookies_dict = requests.utils.dict_from_cookiejar(cookies_jar)
     
@@ -727,13 +724,12 @@ class API_Test_Lib(object):
             #logger.warn('value = %s' % value)
         else:
             for v in jsondata.values():
-                if isinstance(v,dict):
-                    
+                if isinstance(v,dict):                    
                     self.get_value_from_jsondata(v,key,value)
                 if isinstance(v,(list,tuple)):
                     for content in v:
                         self.get_value_from_jsondata(content,key,value)
-        return value[0]
+        return value[-1]
 
     def update_firewall_payload_from_file(self,filename,*args):
         """ Update firewall config json file to payload with given random index
