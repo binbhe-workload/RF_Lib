@@ -721,7 +721,7 @@ class API_Test_Lib(object):
         
         if key in jsondata.keys():
             value.append(jsondata[key])
-            logger.warn('value = %s' % value)
+            #logger.warn('value = %s' % value)
             
         else:
             for v in jsondata.values():
@@ -749,13 +749,19 @@ class API_Test_Lib(object):
             jsondata['id'] = self._current_cpe_id
 
             try:
-
+                key_dict={}
                 for item in args:
                     main_key,key = item.split('.')
                     main_key = main_key.strip()
                     key = key.strip()
-
-                    self._add_rules_to_jsondata(jsondata,main_key,key)
+                    if main_key in key_dict:
+                        key_dict[main_key].append(key)
+                    else:
+                        key_dict[main_key]=[]
+                        key_dict[main_key].append(key)
+                
+                for k,v in key_dict.items():
+                    self._add_rules_to_jsondata(jsondata,k,v)
 
                 logger.info('update jsondata by adding rules>> %s' % jsondata)
                 return jsondata
@@ -766,15 +772,16 @@ class API_Test_Lib(object):
             logger.warn('Invalid filename %s , check if file exists!' % filename)
             raise AssertionError('Fail to load jsonfile %s' % filename)
 
-    def _add_rules_to_jsondata(self,jsondata,main_key,key):
+    def _add_rules_to_jsondata(self,jsondata,main_key,key_list):
         
         if main_key in jsondata.keys():
-            value = jsondata[main_key].pop('random_index')
-            jsondata[main_key][key] = value
+            value = jsondata[main_key].pop('random_index')           
+            for key in key_list:
+                jsondata[main_key][key] = value
         else:
             for v in jsondata.values():
                 if isinstance(v,dict):
-                    self._add_rules_to_jsondata(v,main_key,key)
+                    self._add_rules_to_jsondata(v,main_key,key_list)
 
 
     def update_jsondata(self,jsondata,**kws):
