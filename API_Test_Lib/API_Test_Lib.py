@@ -2,7 +2,7 @@ import os
 import re
 import json
 import requests
-#import warnings
+import copy
 from requests_toolbelt import MultipartEncoder
 import subprocess
 #import collections
@@ -777,7 +777,7 @@ class API_Test_Lib(object):
         if main_key in jsondata.keys():
             value = jsondata[main_key].pop('random_index')           
             for key in key_list:
-                jsondata[main_key][key] = value
+                jsondata[main_key][key] = copy.deepcopy(value)
         else:
             for v in jsondata.values():
                 if isinstance(v,dict):
@@ -815,6 +815,7 @@ class API_Test_Lib(object):
 
 
 
+
 if __name__=='__main__':
     test=API_Test_Lib()
     #test.create_api_test_environment("admin","sdwan123!@#","http://admin.dev.linksdwan.com")
@@ -830,5 +831,5 @@ if __name__=='__main__':
     #print(r)
     file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/firewall_config.json'
     #modify={'wan0.proto':'dhcp','wan0.mtu':'1500'}
-    item=test.update_jsonfile_by_add_rules(file_path,'ids_dnat.1584341013552000000','ids_rule.1584341013551000000')
-    print(item)
+    item=test.update_jsonfile_by_add_rules(file_path,'ids_dnat.1584341013552000000','ids_dnat.1584341013552111111','ids_rule.1584341013551000000')
+    #print(item)
