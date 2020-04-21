@@ -732,6 +732,36 @@ class API_Test_Lib(object):
                         self.get_value_from_jsondata(content,key,value)
         return value[-1]
 
+    def update_jsondata_by_del_rules(self,jsondata,*args):
+        """Update jsondata by delete key/value pairs with given keys
+
+        :param args: specific key which key/value pair to be delete
+
+        :return str payload: return updated payload
+
+        example::
+        | ${payload} | update jsondata by del rules | ${jsondata} | ${rule_name} |
+        """
+        if isinstance(jsondata,str):
+            jsondata = json.loads(jsondata)
+        tmp = {}  # get a new id differents of jsondata
+        tmp = jsondata
+        return self._update_jsondata_by_del_rules(tmp,*args)
+    
+    def _update_jsondata_by_del_rules(self,jsondata,*args):
+        try:
+            for key in args:
+                if key in jsondata.keys():
+                    del jsondata[key]
+                else:
+                    for v in jsondata.values():
+                        if isinstance(v,dict):
+                            self._update_jsondata_by_del_rules(v,key)
+            return jsondata
+        except Exception as e:
+            logger.error(e)
+
+
     def update_jsonfile_by_add_rules(self,filename,*args):
         """ Update config json file to payload with given random index
 
@@ -742,7 +772,7 @@ class API_Test_Lib(object):
         :return dict payload: return updated payload
         
         example::
-        | ${payload} | update firewall payload from file | ${File_directory}/firewall_config.json | ids_rule.${random_num1} |ids_dnat.${random_num2} |
+        | ${payload} | update jsonfile by add rules | ${File_directory}/firewall_config.json | ids_rule.${random_num1} |ids_dnat.${random_num2} |
         """
         if filename and os.path.exists(filename):
             jsondata = self._load_json_file(filename)
@@ -816,6 +846,7 @@ class API_Test_Lib(object):
 
 
 
+
 if __name__=='__main__':
     test=API_Test_Lib()
     #test.create_api_test_environment("admin","sdwan123!@#","http://admin.dev.linksdwan.com")
@@ -832,4 +863,7 @@ if __name__=='__main__':
     file_path='/home/sdwan/Test/RF_Lib/API_Test_Lib/firewall_config.json'
     #modify={'wan0.proto':'dhcp','wan0.mtu':'1500'}
     item=test.update_jsonfile_by_add_rules(file_path,'ids_dnat.1584341013552000000','ids_dnat.1584341013552111111','ids_rule.1584341013551000000')
-    #print(item)
+    copy = copy.deepcopy(item)
+    payload = test.update_jsondata_by_del_rules(item,'1584341013551000000')
+    print('{}\n{}\n{}'.format(id(item),id(payload),id(copy)))
+    
