@@ -168,6 +168,7 @@ class Cpe_Cli(SSHLibrary):
         self.current.execute_command('ifconfig %s down' % interface)
         output = self.current.execute_command('ifconfig %s' % interface)
         inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
+        time.sleep(1)
         if inet:
             logger.warn('Fail to down interface %s!' % interface)
         else:
