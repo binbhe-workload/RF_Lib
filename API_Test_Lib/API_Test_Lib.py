@@ -826,14 +826,19 @@ class API_Test_Lib(object):
         or:
         | ${payload} | update jsondata | ${jsondata} | ${random_num1}.protocol=any | ${random_num2}.protocol=tcp |
         """
-        if kws and isinstance(jsondata,dict):
-            for key,value in kws.items():
-                if '.' in key:
-                    key_list = key.split('.')
-                    payload = self._update_jsondata_by_key_list(jsondata,key_list,value)
-                else:
-                    payload = self.update_jsondata_by_key_value_pair(jsondata,key,value)
-            return json.dumps(payload)
+        if kws and jsondata:
+            if isinstance(jsondata,str):
+                jsondata = json.loads(jsondata)
+            try:
+                for key,value in kws.items():
+                    if '.' in key:
+                        key_list = key.split('.')
+                        payload = self._update_jsondata_by_key_list(jsondata,key_list,value)
+                    else:
+                        payload = self.update_jsondata_by_key_value_pair(jsondata,key,value)
+                return json.dumps(payload)
+            except Exception as e:
+                logger.error(e)
 
 
 
