@@ -168,29 +168,37 @@ class Cpe_Cli(SSHLibrary):
         self.current.execute_command('ifconfig %s down' % interface)
         output = self.current.execute_command('ifconfig %s' % interface)
         inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
-        time.sleep(1)
-        if inet:
-            logger.warn('Fail to down interface %s!' % interface)
-        else:
-            logger.info('interface %s is down, reset procedure is on going' % interface)
-            self.current.execute_command('ifconfig %s up' % interface)
+        for index in range(10):
             time.sleep(1)
-            output = self.current.execute_command('ifconfig %s' % interface)
-            inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
             if inet:
-                logger.info('interface %s is up' % interface)
-                ip = inet.group().split(' ')[1]
-                logger.info('Get interface ip >> %s' % ip)
-                br_lan = ip.split('.')[:-1]
-                br_lan.append('1')
-                br_lan = '.'.join(br_lan)
-                res = self.current.execute_command('ping -c5 -W50 %s' % br_lan)
-                if re.search(r'5 packets transmitted, 5 received',res[0]):
-                    logger.info('Ping br-lan %s ok' % br_lan)
-                    return ip
-                else:
-                    logger.warn('Ping br-lan %s fail, re-process reset %s' % (br_lan,interface))
-                    self.reset_rpi_interface_ip(interface)
+                logger.warn('<DOWN LOOP %s> Fail to down interface %s!' % (index,interface))
+                continue
             else:
-                logger.warn('interface %s reset fail!' % interface)
-        
+                logger.info('<DOWN LOOP %s> interface %s is down, reset procedure is on going' % (index,interface))
+                break
+
+        self.current.execute_command('ifconfig %s up' % interface)
+        if not inet:
+            for i in range(10):
+                time.sleep(1)
+                output = self.current.execute_command('ifconfig %s' % interface)
+                inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
+                if inet:
+                    logger.info('<UP LOOP %s> interface %s is up' % (i,interface))
+                    ip = inet.group().split(' ')[1]
+                    logger.info('Get interface ip >> %s' % ip)
+                    br_lan = ip.split('.')[:-1]
+                    br_lan.append('1')
+                    br_lan = '.'.join(br_lan)
+                    res = self.current.execute_command('ping -c5 -W50 %s' % br_lan)
+                    if re.search(r'5 packets transmitted, 5 received',res[0]):
+                        logger.info('Ping br-lan %s ok' % br_lan)
+                        return ip
+                    else:
+                        logger.warn('Ping br-lan %s fail, re-process reset %s' % (br_lan,interface))
+                        self.reset_rpi_interface_ip(interface)
+                    break
+                else:
+                    logger.warn('<UP LOOP %s> interface %s reset fail!' % (i,interface))
+                    continue
+            
