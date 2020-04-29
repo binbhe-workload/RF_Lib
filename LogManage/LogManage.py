@@ -167,7 +167,7 @@ class LogManage(object):
         if base_phase=='':
             logger.warn('base_phase input error: should be string, not null')
             raise AssertionError('base_phase input error: should be string, not null')
-        #input param pre process
+        #input param process
         offset=int(offset)-1
         base_phase=base_phase.strip()
         target_line=[]
