@@ -234,10 +234,7 @@ class JobProcess(object):
                 feature_path=os.path.join(self._featrue_dir,feature)
                 if feature_path not in self._feature_path_list:
                     self._feature_path_list.append(feature_path)
-                if argfile.startswith('/testplan') or argfile.startswith('testplan'):
-                    argfile_path = os.path.join(self._featrue_dir,argfile)
-                else:
-                    argfile_path = os.path.join(self._testplan_dir,argfile)
+                argfile_path = os.path.join(self._featrue_dir,feature,argfile)
                 if argfile_path not in self._argfile_path_list:
                     self._argfile_path_list.append(argfile_path)
 
@@ -264,12 +261,16 @@ class JobProcess(object):
             for single_case in case_list:
                 argfile = single_case['argfile']
                 feature = single_case['feature']
-                if argfile.startswith('/testplan') or argfile.startswith('testplan'):
-                    argumentfile = os.path.join(self._featrue_dir,argfile)
-                else:
-                    argumentfile = os.path.join(self._testplan_dir,argfile)
+                # if argfile.startswith('/testplan') or argfile.startswith('testplan'):
+                #     argumentfile = os.path.join(self._featrue_dir,argfile)
+                # else:
+                #     argumentfile = os.path.join(self._testplan_dir,argfile)
+                #change argumentfile directory to feature folder put with FeatureSuite.robot
+                argumentfile = os.path.join(self._featrue_dir,feature,argfile)
                 output_dir = os.path.join(tb_log_dir,feature)
-                command = self._create_command(argumentfile,tb_path,output_dir)
+                feature_dir = os.path.join(self._featrue_dir,feature)
+
+                command = self._create_command(argumentfile,tb_path,output_dir,feature_dir)
                 if command not in tb_command_list:
                     tb_command_list.append(command)
             #logger.info('tb_command_list >> %s' % tb_command_list)
@@ -279,14 +280,14 @@ class JobProcess(object):
             logger.info('{}_command.txt created in {}'.format(tb,tb_log_dir))
 
     
-    def _create_command(self,argumentfile,tb_path,output_dir):
+    def _create_command(self,argumentfile,tb_path,output_dir,feature_dir):
         """Return the robot command"""
 
         command_as_list = ["robot"]
         command_as_list.extend(['--argumentfile',argumentfile])
         command_as_list.extend(['-V',tb_path])
         command_as_list.extend(['--outputdir',output_dir])
-        command_as_list.append(self._featrue_dir)
+        command_as_list.append(feature_dir)
 
         command =" ".join(command_as_list)
         #logger.info('Create command >> %s' % command)
