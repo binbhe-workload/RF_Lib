@@ -4,6 +4,7 @@ import subprocess
 import codecs
 import threading
 from queue import Queue,Empty
+import paramiko
 
 
 
@@ -14,18 +15,19 @@ class JobProcess(object):
 
     def __init__(self,skip_job_preprocess):
         self._skip_job_preprocess=skip_job_preprocess  #bool define if skip the job preprocess
-        self._job_owner=None   #get from env ${USER}
-        self._job_name=None    #get from env ${JOB_NAME}
-        self._log_base=None    #top log directory of current job
-        self._case_param=None  #dict type of case_param get from env ${CASE_PARAM}
-        self._image_name=None  #get from self._case_param
-        self._test_plan={}     #grouped test plan get from env ${TEST_PLAN}
-        self._tb_list=None     #generate from self._test_plan
+        self._job_owner=None      #get from env ${USER}
+        self._job_name=None       #get from env ${JOB_NAME}
+        self._log_base=None       #top log directory of current job
+        self._case_param=None     #dict type of case_param get from env ${CASE_PARAM}
+        self._image_name=None     #get from self._case_param
+        self._upgrade_image=None  #get from self._check_image_in_server()
+        self._test_plan={}        #grouped test plan get from env ${TEST_PLAN}
+        self._tb_list=None        #generate from self._test_plan
         self._jenkins_job_path=None  #generate from ${USER},${JOB_NAME}
         self._featrue_dir=None       #generate from self._jenkins_job_path
         self._testplan_dir=None      #generate form self._feature_dir
         self._topo_dir=None          #generate from self._jenkins_job_path
-        self._preprocess_script_dir=None  #generate from self._jenkins_job_path
+        self._basic_dir=None         #pre-process directory,generate from self._jenkins_job_path
         self._feature_path_list=[]        #get from self._create_list_of_feature_and_argfile()
         self._argfile_path_list=[]   #get from self._create_list_of_feature_and_argfile()
         self._queue = Queue()
@@ -48,10 +50,13 @@ class JobProcess(object):
         txt_case_param = os.environ.get('CASE_PARAM')
         if txt_case_param == None:
             logger.warn('NO CASE PARAM, upgrade CPE will NOT handle!')
-        self._case_param = self._txt_parse_to_dict(txt_case_param) #return case_param={'IMAGE':'http://image_url'} or {}
+        self._case_param = self._txt_parse_to_dict(txt_case_param) #return case_param={'IMAGE':'E201/V501-vx.x.x.bin'} or {'IMAGE':'E201'}
         if self._case_param['IMAGE']:
-            self._image_name = self._case_param['IMAGE']
-            logger.info("IMAGE >> %s" % self._image_name)
+            self._image_name = self._case_param['IMAGE']            
+            logger.info("DETECT CASE_PARAM: IMAGE >> %s" % self._image_name)
+        else:  #self._case_param['IMAGE']==''or None
+            logger.info("Not detect param IMAGE, upgrade CPE will NOT handle!")
+
 
         
         #parse test_plan get from env
@@ -68,12 +73,12 @@ class JobProcess(object):
         logger.info('current jenkins job workspace >> %s' % self._jenkins_job_path)
         self._featrue_dir = os.path.join(self._jenkins_job_path,'features')
         logger.info('feature scripts directory >> %s' % self._featrue_dir)
-        self._testplan_dir = os.path.join(self._featrue_dir,'testplan')
-        logger.info('testplan directory >> %s' % self._testplan_dir)
+        #self._testplan_dir = os.path.join(self._featrue_dir,'testplan')
+        #logger.info('testplan directory >> %s' % self._testplan_dir)
         self._topo_dir = os.path.join(self._jenkins_job_path,'public/topo')
         logger.info('public topo directory >> %s' % self._topo_dir )
-        self._preprocess_script_dir = os.path.join(self._jenkins_job_path,'public/basic')
-        logger.info('preprocess script directory >> %s' % self._preprocess_script_dir)
+        self._basic_dir = os.path.join(self._jenkins_job_path,'public/basic')
+        logger.info('preprocess script directory >> %s' % self._basic_dir)
 
 
     
@@ -105,6 +110,16 @@ class JobProcess(object):
                 logger.warn('argfile %s Not found!' % argfile)
                 error_num += 1
 
+        #check self._image_name if image exist in images server
+        if self._image_name:
+            if self._image_name.startswith('E201'):  #IMAGE = E201 or E201-vx.x.x version.bin
+                res = self._check_image_in_server(self._image_name,'E201')
+                error_num += res
+            elif self._image_name.startswith('V501'):
+                res = self._check_image_in_server(self._image_name,'V501')
+                error_num += res
+            
+
         #check test suites in argfiles if existed in sub_feature directory or sub_feature.robot
         #check if IMAGE existed in IMAGE SERVER
         
@@ -118,20 +133,20 @@ class JobProcess(object):
     def run_test_plan(self):
         """Main testcase run method"""
 
+        #create tb_log_base to save each tb cases logs
+        for tb in self._tb_list:
+            tb_log_dir=os.path.join(self._log_base,tb)
+            self._create_log_directory(tb_log_dir)
+        
         #check if CPE upgrade is choosed
-        if self._image_name:
-            self._upgrade_cpe()
+        if self._upgrade_image:
+            self._upgrade_cpe(self._upgrade_image)
 
         #check if --skip-job-preprocess is specified by tester
         if self._skip_job_preprocess:
             logger.info('Detected option --skip-job-preprocess, Skip job preprocess!')
         if not self._skip_job_preprocess:
             self._job_preprocess()
-
-        #create tb_log_base to save each tb cases logs
-        for tb in self._tb_list:
-            tb_log_dir=os.path.join(self._log_base,tb)
-            self._create_log_directory(tb_log_dir)
 
         #write command file for each tb
         self._write_command_file()
@@ -160,12 +175,12 @@ class JobProcess(object):
             logger.warn('Save env log failed!')
             logger.warn('Detail output >> \n %s' % output)
 
-        cmd_pip = 'pip list --format=columns >> %s' % env_file_path
-        logger.info('Saving pip list log to %s' % env_file_path)
-        p_status,p_output = subprocess.getstatusoutput(cmd_pip)
-        if p_status:
-            logger.warn('Save pip list log failed!')
-            logger.warn('Detail output >> \n %s' % p_output)
+        # cmd_pip = 'pip list --format=columns >> %s' % env_file_path
+        # logger.info('Saving pip list log to %s' % env_file_path)
+        # p_status,p_output = subprocess.getstatusoutput(cmd_pip)
+        # if p_status:
+        #     logger.warn('Save pip list log failed!')
+        #     logger.warn('Detail output >> \n %s' % p_output)
         
 
 
@@ -238,18 +253,62 @@ class JobProcess(object):
                 if argfile_path not in self._argfile_path_list:
                     self._argfile_path_list.append(argfile_path)
 
+    
+    def _check_image_in_server(self,image_name,version):
+        
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(hostname='172.31.25.77',username='autobuild',password='linkwan123456')
+            stdout = client.exec_command('ls -t /home/developers/images/%s*' % version)            
+            output = stdout[1].read().decode('utf-8')
+            all_image_dir = output.split('\n')          
+            client.close()
+
+            if image_name == version:
+                self._latest_image = os.path.split(all_image_dir[0])[1]
+                logger.info('Get latest %s version in server: %s ' % (image_name,self._latest_image))
+                self._upgrade_image = self._latest_image
+                return 0
+            elif image_name.endswith('bin') or image_name.endswith('img'):
+                for image_dir in all_image_dir:
+                    if image_name in image_dir:
+                        self._upgrade_image = image_name
+                        logger.info('IMAGE %s found in images server' % image_name)
+                        return 0
+            else:
+                logger.warn('Can not find IMAGE %s in images server' % image_name)
+                return 1
+        except Exception as e:
+            logger.warn(e)
+            return 1       
+
+
 
     def _job_preprocess(self):
         """Process this method if self._skip_job_preprocess==False"""
         pass
 
 
-    def _upgrade_cpe(self):
-        """Process CPE upgrade procedure 
+    def _upgrade_cpe(self,image):
+        """Process CPE upgrade procedure  
         if IMAGE is detected in ${CASE_PARAM}"""
-        pass
+        argfile = os.path.join(self._basic_dir,'Upgrade_Cpe.txt')
+        for tb in self._tb_list:
+            tb_file = os.path.join(self._topo_dir,'{}.py'.format(tb))
+            opt_dir = os.path.join(self._log_base,tb,'upgrade_log')
+            cmd = 'robot --argumentfile {0} -v {1} -V {2} --outputdir {3} {4}'.format(argfile,
+                                                image,tb_file,opt_dir,self._basic_dir)
 
-    
+            status,output = subprocess.getstatusoutput(cmd)
+            if status:
+                logger.warn('Run command %s fail! Upgrade to %s cancled!' % (cmd,image))
+            else:
+                logger.info('%s Upgrading to %s' % (tb,image))
+                logger.info(output)
+
+        
+   
     def _write_command_file(self):
         """ wirte command list file for each tb site"""
 
@@ -261,11 +320,6 @@ class JobProcess(object):
             for single_case in case_list:
                 argfile = single_case['argfile']
                 feature = single_case['feature']
-                # if argfile.startswith('/testplan') or argfile.startswith('testplan'):
-                #     argumentfile = os.path.join(self._featrue_dir,argfile)
-                # else:
-                #     argumentfile = os.path.join(self._testplan_dir,argfile)
-                #change argumentfile directory to feature folder put with FeatureSuite.robot
                 argumentfile = os.path.join(self._featrue_dir,feature,argfile)
                 output_dir = os.path.join(tb_log_dir,feature)
                 feature_dir = os.path.join(self._featrue_dir,feature)
@@ -316,5 +370,7 @@ class JobProcess(object):
 
 
 
-
+if __name__ == "__main__":
+    test = JobProcess(True)
+    test._check_image_in_server('E201','E201')
 
