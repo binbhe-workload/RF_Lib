@@ -42,13 +42,18 @@ class Cpe_Cli(SSHLibrary):
             or:
             | upgrade image | E201-vx.x.x.bin | clean_conf=true |
         """
+        image_name = image_name.strip()
         if image_name == 'E201' or image_name == 'V501':
             image = self._get_latest_image(image_name)
             if image=='no image found!':
                 logger.warn('no image found,please check whether image exists in file path http://172.31.25.77:8880/images')
-                raise AssertionError('no image found')
+                raise AssertionError('IMAGE error')
         elif image_name.endswith('bin') or image_name.endswith('img'):
-            image = image_name    
+            image = image_name
+        else:
+            logger.warn('IMAGE %s is illegal!')
+            raise AssertionError('IMAGE error')
+
 
         url='http://172.31.25.77:8880/images/'+image
         logger.info('image_url is: %s' % url)
@@ -79,7 +84,7 @@ class Cpe_Cli(SSHLibrary):
                     #self.open_connection(current_host)
                     #open connection but not login due to lack of usr/pwd
                 if cpe_connection == 0:
-                    logger.warn('ping cpe timeout,please check cpe status manually')
+                    logger.warn('ping cpe %s timeout,please check cpe status manually' % current_host)
         except Exception as e:
             logger.error(e)
     
@@ -94,7 +99,7 @@ class Cpe_Cli(SSHLibrary):
         ping_pass=0
         while count<=total and ping_pass==0:
             ping_result=subprocess.getoutput(ping_cmd)
-            if re.search(r'5 packets transmitted, 5 packets received',ping_result):
+            if re.search(r'5 packets transmitted, 5 received',ping_result):
                 ping_pass=1
             else:
                 count+=1
@@ -113,7 +118,7 @@ class Cpe_Cli(SSHLibrary):
         try:
             version=output[0]
             version=version.strip().split('\n')
-            logger.info('version_list is %s ' % version)
+            #logger.info('version_list is %s ' % version)
             dict={}
             for line in version[:-1]:
                 key,value=line.split(':')
