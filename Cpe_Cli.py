@@ -1,3 +1,4 @@
+import os
 import re,time
 import paramiko
 import subprocess
@@ -6,71 +7,89 @@ from SSHLibrary.library import SSHLibrary
 
 class Cpe_Cli(SSHLibrary):
     
-    def _get_latest_image(self):
-        client=paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(hostname='172.31.25.77',username='autobuild',password='linkwan123456')
-        stdin,stdout,stderr=client.exec_command('ls -t /home/developers/images')
+    def _get_latest_image(self,image_type):
+        
         try:
-            output=stdout.read().decode('utf-8')
-            all_image=output.strip().split('\n')
-            latest_image=all_image[0]
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(hostname='172.31.25.77',username='autobuild',password='linkwan123456')
+            stdout = client.exec_command('ls -t /home/developers/images/%s' % image_type)        
+            output = stdout[1].read().decode('utf-8')
+            all_image_dir = output.split('\n')
+            client.close()
+
+            latest_image = os.path.split(all_image_dir[0])[1]
             logger.info('latest_image is: %s' % latest_image)
+        
         except Exception as e:
             latest_image='no image found!'
             logger.warn(e)
-        client.close()
         return latest_image
 
 
-    def upgrade_image(self,url='default',clean_conf='false',timeout=300):
+    def upgrade_image(self,image_name,clean_conf='false'):
         """Upgrade image for CPE via using command 'sysupgrade (-n) url'
         if you want to upgrade CPE with the latest version of image for example:
             | open connection | ${cpe_ip} |
-            | login | ${cpe_username} | ${cpe_password} |
-            | upgrade image |
+            | login | ${cpe_username} | ${cpe_password} | 
+            | upgrade image | E201 |
 
         if you want to use the specific version of image, replace the part of upgrade image to:
-            | upgrade image | http://172.31.25.77:8880/images/CPE-201-image-XXXXXX.bin |
+            | upgrade image | E201-vx.x.x.bin |
 
         if you want to clean the config after upgrade CPE, append argument clean_conf=true as below:
             | upgrade image | clean_conf=true |
             or:
-            | upgrade image | http://172.31.25.77:8880/images/CPE-201-image-XXXXXX.bin | clean_conf=true |
+            | upgrade image | E201-vx.x.x.bin | clean_conf=true |
         """
-        if url=='default':
-            image=self._get_latest_image()
+        image_name = image_name.strip()
+        if image_name == 'E201' or image_name == 'V501':
+            image = self._get_latest_image(image_name)
             if image=='no image found!':
                 logger.warn('no image found,please check whether image exists in file path http://172.31.25.77:8880/images')
-                raise AssertionError('no image found')
-            url='http://172.31.25.77:8880/images/'+image
-            logger.info('image_url is: %s' % url)
+                raise AssertionError('IMAGE error')
+        elif image_name.endswith('bin') or image_name.endswith('img'):
+            image = image_name
+        else:
+            logger.warn('IMAGE %s is illegal!')
+            raise AssertionError('IMAGE error')
+
+
+        url='http://172.31.25.77:8880/images/'+image
+        logger.info('image_url is: %s' % url)
+
+        self._upgrade_image(url,clean_conf)
         
-        if clean_conf=='false':
-            cmd='sysupgrade '+url
-        if clean_conf.lower()=='true':
-            cmd='sysupgrade -n '+url
-        logger.info('upgrde CPE via command: %s' % cmd)
-        current_host=self.current.config.host
+
+    def _upgrade_image(self,url,clean_conf):
+
+        if clean_conf == 'false':
+            cmd = 'sysupgrade ' + url
+        elif clean_conf.lower() == 'true':
+            cmd = 'sysupgrade -n ' + url
+        logger.info('upgrade CPE via command: %s' % cmd,also_console=True)
         try:
-            output=self.current.execute_command(cmd)
-            logger.info(output[1])
-            logger.info(output[0])
-            upgrade_result=output[1]
+            current_host = self.current.config.host
+            output = self.current.execute_command(cmd)
+            upgrade_result = output[1]
+            logger.info(upgrade_result,also_console=True)
+            logger.info('\n',output[0],also_console=True)
             if not re.search(r'Download completed',upgrade_result):
-                logger.warn('Download from %s failed' % url)
+                logger.warn('Download image from %s failed!' % url)
             if re.search(r'Closing all shell sessions',output[0]):
                 time.sleep(15)
-                cpe_connection=self._ping_device(current_host)
-                if cpe_connection==1:
-                    logger.info('ping cpe success, checking image version of cpe...')
-                    self.open_connection(current_host)
+                cpe_connection = self._ping_device(current_host)
+                if cpe_connection == 1:
+                    logger.info('ping cpe success,prepare to check current image version of cpe')
+                    #self.open_connection(current_host)
                     #open connection but not login due to lack of usr/pwd
-                if cpe_connection==0:
-                    logger.warn('ping cpe timeout')
-
+                if cpe_connection == 0:
+                    logger.warn('ping cpe %s timeout,please check cpe status manually' % current_host)
         except Exception as e:
-            logger.warn(e)
+            logger.error(e)
+    
+
+
 
     def _ping_device(self,host,total=30):
         logger.info('ping device with host ip: %s' % host)
@@ -80,7 +99,7 @@ class Cpe_Cli(SSHLibrary):
         ping_pass=0
         while count<=total and ping_pass==0:
             ping_result=subprocess.getoutput(ping_cmd)
-            if re.search(r'5 packets transmitted, 5 packets received',ping_result):
+            if re.search(r'5 packets transmitted, 5 received',ping_result):
                 ping_pass=1
             else:
                 count+=1
@@ -99,11 +118,12 @@ class Cpe_Cli(SSHLibrary):
         try:
             version=output[0]
             version=version.strip().split('\n')
-            logger.info('version_list is %s ' % version)
+            #logger.info('version_list is %s ' % version)
             dict={}
             for line in version[:-1]:
-                key,value=line.split(':')
-                key,value=key.strip(),value.strip()
+                idx = line.index(':')
+                key = line[:idx].strip()  #except the first ':', the other ':'(build time for example) belong to value
+                value = line[idx+1:].strip()
                 dict[key]=value
             #current_version=dict['PLATFORM']+'-image-'+dict['OSVERSION']+'-'+dict['BUILD_COOKIE']
             #logger.info('current image version is: %s' % current_version)

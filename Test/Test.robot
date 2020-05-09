@@ -1,5 +1,6 @@
 *** Settings ***
 Test Setup        Initial_Env_Setup
+Default Tags      API
 Variables         ../API_Test_Lib/personal.py
 Resource          ../API_Test_Resource.robot
 Library           ../API_Test_Lib/API_Test_Lib.py
@@ -8,6 +9,7 @@ Library           String
 
 *** Test Cases ***
 agents_management
+    [Tags]    API
     ${status_code}    ${jdata}=    get request    /proxy/major/api/agents?upperRelationId.equals=0&sort=id,desc&page=0&size=999
     ${payload}    Evaluate    {"company":"autotest","type":"","bandwidth":0,"cost":"0.00","region":"","realName":"","phone":"","login":"autotest@netbank.cn","address":"","domain":"","tsdbUrl":"1.1.1.1"}
     ${status_code}    ${jdata}    post request    /proxy/major/api/agents    ${payload}
