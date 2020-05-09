@@ -73,7 +73,9 @@ class Cpe_Cli(SSHLibrary):
             output = self.current.execute_command(cmd)
             upgrade_result = output[1]
             logger.info(upgrade_result,also_console=True)
+
             logger.info(output[0],also_console=True)
+
             if not re.search(r'Download completed',upgrade_result):
                 logger.warn('Download image from %s failed!' % url)
             if re.search(r'Closing all shell sessions',output[0]):
