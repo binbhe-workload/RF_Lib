@@ -121,8 +121,9 @@ class Cpe_Cli(SSHLibrary):
             #logger.info('version_list is %s ' % version)
             dict={}
             for line in version[:-1]:
-                key,value=line.split(':')
-                key,value=key.strip(),value.strip()
+                idx = line.index(':')
+                key = line[:idx].strip()  #except the first ':', the other ':'(build time for example) belong to value
+                value = line[idx+1:].strip()
                 dict[key]=value
             #current_version=dict['PLATFORM']+'-image-'+dict['OSVERSION']+'-'+dict['BUILD_COOKIE']
             #logger.info('current image version is: %s' % current_version)
