@@ -6,9 +6,23 @@ from robot.parsing import TestData
 
 
 
-#parser = argparse.ArgumentParser(description='Generate _full_cases_list.txt')
+def main(parser):
+    args = parser.parse_args()
+    source = args.source
 
-#parser.add_argument('--source')
+    generate_argfile = Generate_argfile()
+    try:
+        generate_argfile.parse_testdata(source)
+    except Exception as e:
+        logger.warn(e)
+
+
+Parser = argparse.ArgumentParser(description='Generate _full_cases_list.txt')
+
+Parser.add_argument('--source',default='default',
+                    help='Specific the feature source directory where _full_cases_list.txt generate from')
+
+
 
 class Generate_argfile(object):
     """Implements writing of parsed test case files to a argfile"""
@@ -70,5 +84,4 @@ class Generate_argfile(object):
 
 
 if __name__=="__main__":
-    test = Generate_argfile()
-    test.parse_testdata()
+    main(Parser)
