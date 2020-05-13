@@ -222,8 +222,11 @@ class JobProcess(object):
     def _group_test_plan(self,txt_test_plan):
         """return a dict of {'tb_list':[test_plan_dic]}
         such as {'tb_index':[{'feature':'AP_VLAN','argfile':'/testplan/apvalan_case_for_dit.txt'},{}],}"""
-
-        lines = txt_test_plan.splitlines()   #['tb1,feature,file','']
+        
+        try:
+            lines = txt_test_plan.splitlines()   #['tb1,feature,file','']
+        except:
+            lines = list(txt_test_plan)
         for line in lines:
             tb,feature,argfile = line.split(',')
             tb = tb.strip()
@@ -287,7 +290,7 @@ class JobProcess(object):
 
     def _job_preprocess(self):
         """Process this method if self._skip_job_preprocess==False"""
-        pass
+        logger.info('Job Preprocess is on going')
 
 
     def _upgrade_cpe(self,image):
@@ -297,12 +300,12 @@ class JobProcess(object):
         for tb in self._tb_list:
             tb_file = os.path.join(self._topo_dir,'{}.py'.format(tb))
             opt_dir = os.path.join(self._log_base,tb,'upgrade_log')
-            cmd = 'robot --argumentfile {0} -v {1} -V {2} --outputdir {3} {4}'.format(argfile,
+            cmd = 'robot --argumentfile {0} -v IMAGE_NAME:{1} -V {2} --outputdir {3} {4}'.format(argfile,
                                                 image,tb_file,opt_dir,self._basic_dir)
 
             status,output = subprocess.getstatusoutput(cmd)
             if status:
-                logger.warn('Run command %s fail! Upgrade to %s cancled!' % (cmd,image))
+                logger.warn('Run Upgrade command  "%s"  fail! Upgrade to "%s" cancled!' % (cmd,image))
             else:
                 logger.info('%s Upgrading to %s' % (tb,image))
                 logger.info(output)
@@ -337,7 +340,7 @@ class JobProcess(object):
     def _create_command(self,argumentfile,tb_path,output_dir,feature_dir):
         """Return the robot command"""
 
-        command_as_list = ["robot"]
+        command_as_list = ["robot"] 
         command_as_list.extend(['--argumentfile',argumentfile])
         command_as_list.extend(['-V',tb_path])
         command_as_list.extend(['--outputdir',output_dir])
