@@ -65,6 +65,7 @@ class Generate_argfile(object):
                 for suite,test_list in tmp.items():
                     f.write('--suite\n%s\n--test\n' % suite)
                     f.write('\n--test\n'.join(test_list))
+                    f.write('\n')
             logger.info('_full_cases_list.txt writed in %s' % suite_dir)
         except Exception as e:
             logger.warn(e)               

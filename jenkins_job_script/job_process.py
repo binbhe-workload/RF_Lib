@@ -65,7 +65,7 @@ class JobProcess(object):
             logger.critical('NO TEST PLAN found, will end job process!')
             raise AssertionError('NO TEST PLAN found!')
         else:
-            self._group_test_plan(txt_test_plan) 
+            self._group_test_plan(txt_test_plan)            
             #return {'tb_index':[{'feature':'AP_VLAN','argfile':'/testplan/apvalan_case_for_dit.txt'},{}],}
 
         #parse autocase scripts local workspace path which gitlab fetch branch to
@@ -220,8 +220,8 @@ class JobProcess(object):
 
     
     def _group_test_plan(self,txt_test_plan):
-        """return a dict of {'tb_list':[test_plan_dic]}
-        such as {'tb_index':[{'feature':'AP_VLAN','argfile':'/testplan/apvalan_case_for_dit.txt'},{}],}"""
+        """return a dict of {'tb_list':[test_plan_dic]}, such as:
+        {'tb_index':[{'feature':'AP_VLAN','argfile':'/testplan/apvalan_case_for_dit.txt'},{}],}"""
         
         try:
             lines = txt_test_plan.splitlines()   #['tb1,feature,file','']
@@ -290,9 +290,21 @@ class JobProcess(object):
 
     def _job_preprocess(self):
         """Process this method if self._skip_job_preprocess==False"""
-        logger.info('Job Preprocess is on going')
+        logger.info('Job Preprocess start')
+        argfile = os.path.join(self._basic_dir,'Pre_process.txt')
+        for tb in self._tb_list:
+            tb_file = os.path.join(self._topo_dir,'{}.py'.format(tb))
+            opt_dir = os.path.join(self._log_base,tb,'PreProcess_log')
+            cmd = 'robot --argumentfile {0} -V {1} --outputdir {2} {3}'.format(argfile,tb_file,opt_dir,self._basic_dir)
+            status,output = subprocess.getstatusoutput(cmd)
+            if status:
+                logger.warn('Run Pre_process command "%s" fail! Pre_process cancled!' % cmd)
+                logger.warn(output)
+                raise AssertionError('Job Pre_process fail!')
+            else:
+                logger.info('%s Pre process success' % tb)
 
-
+                
     def _upgrade_cpe(self,image):
         """Process CPE upgrade procedure  
         if IMAGE is detected in ${CASE_PARAM}"""
