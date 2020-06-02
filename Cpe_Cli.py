@@ -73,12 +73,10 @@ class Cpe_Cli(SSHLibrary):
             output = self.current.execute_command(cmd)
             upgrade_result = output[1]
             logger.info(upgrade_result,also_console=True)
-
             logger.info(output[0],also_console=True)
-
             if not re.search(r'Download completed',upgrade_result):
                 logger.warn('Download image from %s failed!' % url)
-            if re.search(r'Closing all shell sessions',output[0]):
+            if re.search(r'Closing all shell sessions',output[0]) or re.search(r'Saving config files',output[0]):
                 time.sleep(15)
                 cpe_connection = self._ping_device(current_host)
                 if cpe_connection == 1:
