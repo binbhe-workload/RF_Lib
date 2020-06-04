@@ -185,7 +185,33 @@ class LogManage(object):
         return target_line
 
 
-        
+    def should_be_in_range(self,number,range):
+        """Fails if the given number not in range.
+
+        :param number: given number to be compared
+
+        :param range: the expected range of the number should be in
+
+        example for compare if ${x} in range 0~10:
+        | should be in range | ${x} | 0,10 |
+        """
+        try:
+            if isinstance(number,str):
+                number = float(number.strip())
+            if isinstance(number,int):
+                number = float(number)
+            low,up = range.split(',')
+            low = float(low.strip())
+            up = float(up.strip())
+        except Exception as e:
+            logger.error('illegal number or range! %s' % e)
+        if number < low or number > up:
+            msg = '{0} not in range {1}~{2}'.format(number,low,up)
+            logger.warn(msg)
+            raise AssertionError(msg)
+            
+
+
 
 
 
