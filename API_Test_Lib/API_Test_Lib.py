@@ -518,6 +518,8 @@ class API_Test_Lib(object):
                 cookie=cookie['access_token']
                 logger.info(cookie)
             else:
+                logger.error('status:%s Fail to Get cookie' % status)
+                logger.error(output)
                 raise AssertionError("Fail To Get cookie")
         except:
             raise AssertionError("Fail to get cookie")
@@ -744,7 +746,7 @@ class API_Test_Lib(object):
         """
         if isinstance(jsondata,str):
             jsondata = json.loads(jsondata)
-        tmp = {}  # get a new id differents of jsondata
+        tmp = {}  # get a new id differents from jsondata
         tmp = jsondata
         return self._update_jsondata_by_del_rules(tmp,*args)
     
@@ -776,7 +778,8 @@ class API_Test_Lib(object):
         """
         if filename and os.path.exists(filename):
             jsondata = self._load_json_file(filename)
-            jsondata['id'] = self._current_cpe_id
+            if 'id' in jsondata:
+                jsondata['id'] = self._current_cpe_id
 
             try:
                 key_dict={}
@@ -839,6 +842,39 @@ class API_Test_Lib(object):
                 return json.dumps(payload)
             except Exception as e:
                 logger.error(e)
+
+
+    def generate_websocket_url(self,sn,account='root',passwd='linkwan',base_url=''):
+        """Generate websocket url by given cpe sn
+        
+        :param str sn: given cpe sn
+
+        :param str account/passwd: username and password to login cpe,default is 'root'/'linkwan'
+
+        :param str base_url: base url of websocket,default is get from initial env setup
+
+        :param str cookie: default cookie get from initial env setup
+
+        :return: url generated for websocket startswith 'wss://'
+
+        example:
+        | ${websocket_url} | generate websocket url | ${sn} |
+        or:
+        | ${websocket_url} | generate websocket url | ${sn} | ${account} | ${password} | ${base_url} |
+
+        """
+        if not base_url:
+            base_url = self.base_url
+        cookie = self.cookie
+
+        if base_url.startswith('http'):
+            base_url = re.sub(r'htt*+//','',base_url)
+
+        url= '''wss://{0}/terminal/socket.io/term/?
+                token={1}&cols=143&rows=7&sn={2}&account={3}&password={4}&socketUrl={5}
+                &protocol=https&EIO=3&transport=websocket'''.format(base_url,cookie,sn,account,passwd,base_url)
+        return url
+
 
 
 
