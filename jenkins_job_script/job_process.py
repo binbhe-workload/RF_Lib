@@ -20,7 +20,7 @@ class JobProcess(object):
         self._log_base=None       #top log directory of current job
         self._case_param=None     #dict type of case_param get from env ${CASE_PARAM}
         self._image_name=None     #get from self._case_param
-        self._upgrade_image=None  #get from self._check_image_in_server()
+        self._upgrade_image=[]    #get from self._check_image_in_server()
         self._test_plan={}        #grouped test plan get from env ${TEST_PLAN}
         self._tb_list=None        #generate from self._test_plan
         self._jenkins_job_path=None  #generate from ${USER},${JOB_NAME}
@@ -48,15 +48,17 @@ class JobProcess(object):
 
         #parse CASE_PARAM get from env
         txt_case_param = os.environ.get('CASE_PARAM')
-        if txt_case_param == None:
+        if txt_case_param:
+            self._case_param = self._txt_parse_to_dict(txt_case_param) 
+            #return case_param={'IMAGE':['E201-vx.x.x.bin','V501-vx.x.x.bin']} or {'IMAGE':'E201'} or {'IMAGE':['E201','V501']} or {'IMAGE':''}
+            logger.info('self._case_param: %s' % self._case_param)
+            if self._case_param['IMAGE']:
+                self._image_name = self._case_param['IMAGE']            
+                logger.info("DETECT CASE_PARAM: IMAGE >> %s" % self._image_name)
+            else:  #self._case_param['IMAGE']==''or None
+                logger.info("Not detect param IMAGE, upgrade CPE will NOT handle!")
+        else:
             logger.warn('NO CASE PARAM, upgrade CPE will NOT handle!')
-        self._case_param = self._txt_parse_to_dict(txt_case_param) #return case_param={'IMAGE':'E201/V501-vx.x.x.bin'} or {'IMAGE':'E201'}
-        if self._case_param['IMAGE']:
-            self._image_name = self._case_param['IMAGE']            
-            logger.info("DETECT CASE_PARAM: IMAGE >> %s" % self._image_name)
-        else:  #self._case_param['IMAGE']==''or None
-            logger.info("Not detect param IMAGE, upgrade CPE will NOT handle!")
-
 
         
         #parse test_plan get from env
@@ -92,6 +94,7 @@ class JobProcess(object):
         self._tb_list = list(self._test_plan.keys())
         for tb_name in self._tb_list:
             tb_topology_path = os.path.join(self._topo_dir,'{}.py'.format(tb_name))
+            logger.info('check TB topology file %s.py' % tb_name)
             if not os.path.exists(tb_topology_path):
                 logger.warn('TB topology file %s.py Not found!' % tb_name)
                 error_num += 1
@@ -99,26 +102,37 @@ class JobProcess(object):
         #check if feature directory existed
         for feature_path in self._feature_path_list:
             if os.path.exists(feature_path) or os.path.exists(feature_path+'.robot'):
+                logger.info('check Feature file %s' % feature_path)
                 pass
             else:
-                logger.warn('Feature %s or %s.robot Not found!' % feature_path)
+                logger.warn('Feature %s Not found!' % feature_path)
                 error_num += 1
 
         #check if argfile existed
         for argfile in self._argfile_path_list:
+            logger.info('check argfile %s' % argfile)
             if not os.path.exists(argfile):
                 logger.warn('argfile %s Not found!' % argfile)
                 error_num += 1
 
         #check self._image_name if image exist in images server
-        if self._image_name:
+        if self._image_name and isinstance(self._image_name,str):
+            logger.info('check if image %s exist in images server' % self._image_name)
             if self._image_name.startswith('E201'):  #IMAGE = E201 or E201-vx.x.x version.bin
                 res = self._check_image_in_server(self._image_name,'E201')
                 error_num += res
             elif self._image_name.startswith('V501'):
                 res = self._check_image_in_server(self._image_name,'V501')
                 error_num += res
-            
+        if self._image_name and isinstance(self._image_name,list):
+            logger.info('check if image %s exist in images server' % self._image_name)
+            for image in self._image_name:
+                if image.strip().startswith('E201'):
+                    res = self._check_image_in_server(image.strip(),'E201')
+                    error_num += res
+                elif image.strip().startswith('V501'):
+                    res = self._check_image_in_server(image.strip(),'V501')
+                    error_num += res
 
         #check test suites in argfiles if existed in sub_feature directory or sub_feature.robot
         #check if IMAGE existed in IMAGE SERVER
@@ -216,6 +230,10 @@ class JobProcess(object):
                 key = line[:idx].strip()   #except the first '=',the other '=' belong to var_value
                 value = line[idx+1:].strip()
                 item[key] = value
+        for k in item:
+            if ',' in item[k]:
+                image = item[k].split(',')
+                item[k] = image
         return item
 
     
@@ -269,14 +287,14 @@ class JobProcess(object):
             client.close()
 
             if image_name == version:
-                self._latest_image = os.path.split(all_image_dir[0])[1]
-                logger.info('Get latest %s version in server: %s ' % (image_name,self._latest_image))
-                self._upgrade_image = self._latest_image
+                latest_image = os.path.split(all_image_dir[0])[1]
+                logger.info('Get latest %s version in server: %s ' % (image_name,latest_image))
+                self._upgrade_image.append(latest_image)
                 return 0
             elif image_name.endswith('bin') or image_name.endswith('img'):
                 for image_dir in all_image_dir:
                     if image_name in image_dir:
-                        self._upgrade_image = image_name
+                        self._upgrade_image.append(image_name)
                         logger.info('IMAGE %s found in images server' % image_name)
                         return 0
             else:
@@ -305,21 +323,28 @@ class JobProcess(object):
                 logger.info('%s Pre process success' % tb)
 
                 
-    def _upgrade_cpe(self,image):
+    def _upgrade_cpe(self,image_list):
         """Process CPE upgrade procedure  
         if IMAGE is detected in ${CASE_PARAM}"""
         argfile = os.path.join(self._basic_dir,'Upgrade_Cpe.txt')
         for tb in self._tb_list:
             tb_file = os.path.join(self._topo_dir,'{}.py'.format(tb))
             opt_dir = os.path.join(self._log_base,tb,'upgrade_log')
-            cmd = 'robot --argumentfile {0} -v IMAGE_NAME:{1} -V {2} --outputdir {3} {4}'.format(argfile,
-                                                image,tb_file,opt_dir,self._basic_dir)
+            cpe,vcpe = '',''
+            for image in image_list:
+                if image.startswith('E201'):
+                    cpe = image
+                elif image.startswith('V501'):
+                    vcpe = image
+            cmd = 'robot --argumentfile {0} -v IMAGE_E201:{1} -v IMAGE_V501:{2} -V {3} --outputdir {4} {5}'.format(argfile,
+                                                    cpe,vcpe,tb_file,opt_dir,self._basic_dir)
+            logger.info('upgrade cpe RF command: %s' % cmd)
 
             status,output = subprocess.getstatusoutput(cmd)
             if status:
                 logger.warn('Run Upgrade command  "%s"  fail! Upgrade to "%s" cancled!' % (cmd,image))
             else:
-                logger.info('%s Upgrading to %s' % (tb,image))
+                logger.info('%s Upgrading to %s' % (tb,image_list))
                 logger.info(output)
 
         
