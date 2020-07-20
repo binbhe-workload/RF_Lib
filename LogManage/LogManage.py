@@ -1,5 +1,6 @@
 from robot.api import logger
 import re
+import openpyxl
 
 
 
@@ -210,6 +211,103 @@ class LogManage(object):
             logger.warn(msg)
             raise AssertionError(msg)
             
+    def replace_string_by_index(self,string,index_range,sub_string):
+        """Replace the given string by index.
+
+        :param string: given string to be replaced
+
+        :param index_range: given index range to be replaced
+
+        :param sub_string: given new sub string to replace
+
+        example:: replace the last string to a new one
+        | ${new_string} | replace string by index | 192.168.1.1 | -1 | 0 |
+        return: ${new_string}=192.168.1.0
+
+        example::
+        | ${new_string} | replace string by index | hello world | 1,4 | i |
+        return: ${new_string}=hi world
+        """
+        new_string = ''
+        try:
+            if ',' in index_range:
+                start,end = index_range.split(',')
+                start = int(start.strip())
+                end = int(end.strip())
+                new_string = string[:start]+sub_string+string[end+1:]
+            elif '-' in index_range:
+                index = int(index_range.strip())
+                new_string = string[:index]+sub_string
+            else:
+                index = int(index_range.strip())
+                new_string = string[:index]+sub_string+string[index+1:]
+        except Exception as e:
+            logger.error(e)
+        return new_string
+
+    def compare_dhcp_pools_leases_ip(self,phase,*pools):
+        """Return result(true/false) of comparision between
+        dhcp config pools and acture dhcp.leases
+
+        :param str phase: string get from dhcp.leases
+        
+        :param pools: ip range of a dhcp pool
+
+        example:
+        | ${dhcp_leases} | execute command | cat /tmp/dhcp.leases |
+        | ${result} | compare dhcp pools leases ip | ${dhcp_leases} | 192.168.3.3~192.168.3.10 | 192.168.3.100~192.168.3.110 |
+        """
+        leases_list = []
+        pool_list = []
+        try:
+            error = 0
+            phase_list = phase.split('/n')
+            for line in phase_list:
+                line = re.sub(r'\s+',' ',line.strip())
+                line = line.split(' ')
+                leases_list.append(line[2])
+            for pool in pools:
+                start,end = pool.split('~')
+                start,end = start.split('.'),end.split('.')
+                while int(start[-1]) <= int(end[-1]):
+                    pool_list.append('.'.join(start))
+                    start[-1] = str(int(start[-1])+1)
+            for leases in leases_list:
+                if leases not in pool_list:
+                    logger.warn('%s not in dhcp ip pool %s' % (leases,pool_list))
+                    error += 1
+            
+        except Exception as e:
+            logger.error(e)
+        
+        if error == 0 :
+            return True
+        else:
+            return False
+
+    def write_import_file(self,file_path,**content):
+        """Wirte equipment sn and image version into import file sn.xlsx
+
+        example:
+        | write import file | ${CURDIR}/sn.xlsx | ${CPE1.SN}=${verion_1} |${CPE2.SN}=${version_2} |
+        """
+        try:
+            wb = openpyxl.load_workbook(file_path)
+            sheet = wb.active
+            #c = sheet.cell(row=1,column=1)
+            
+            if content:
+                for item in content.items():
+                    item = list(item)
+                    sheet.append(item)
+                    print(item)
+            wb.save(file_path)
+        except Exception as e:
+            logger.error(e)
+
+
+
+
 
 
 
@@ -233,8 +331,8 @@ if __name__=="__main__":
     
     client=paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname='10.201.0.217',username='root',password='sdwan')
-    stdin,stdout,stderr=client.exec_command('route')
+    client.connect(hostname='10.201.0.77',username='root',password='linkwan')
+    stdin,stdout,stderr=client.exec_command('cat /tmp/dhcp.leases')
     table=stdout.read().decode('utf-8')
     #Iface=test.get_info_from_table(table,'Destination=10.201.0.0','Metric=1','Iface')
     #print(Iface)

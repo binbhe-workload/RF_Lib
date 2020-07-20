@@ -7,25 +7,27 @@ from SSHLibrary.library import SSHLibrary
 
 class Cpe_Cli(SSHLibrary):
     
-    def _get_latest_image(self,image_type):
+    def _get_latest_image(self,image_type,image_dir="images"):
         
         try:
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             client.connect(hostname='172.31.25.77',username='autobuild',password='linkwan123456')
-            stdout = client.exec_command('ls -t /home/developers/images/%s' % image_type)        
+            stdout = client.exec_command('ls -t /home/developers/%s/%s' % (image_dir,image_type))        
             output = stdout[1].read().decode('utf-8')
             all_image_dir = output.split('\n')
             client.close()
 
             latest_image = os.path.split(all_image_dir[0])[1]
             logger.info('latest_image is: %s' % latest_image)
+            return latest_image
         
         except Exception as e:
-            latest_image='no image found!'
+            logger.warn('no image found,please check whether image exists in file path http://172.31.25.77:8880/images')
             logger.warn(e)
-        return latest_image
-
+            raise AssertionError('IMAGE error')
+        
+        
 
     def upgrade_image(self,image_name,clean_conf='false'):
         """Upgrade image for CPE via using command 'sysupgrade (-n) url'
@@ -50,10 +52,8 @@ class Cpe_Cli(SSHLibrary):
             image_name = image_name.strip()
             if image_name == 'E201' or image_name == 'V501':
                 image = self._get_latest_image(image_name)
-                if image=='no image found!':
-                    logger.warn('no image found,please check whether image exists in file path http://172.31.25.77:8880/images')
-                    raise AssertionError('IMAGE error')
-            elif image_name.endswith('bin') or image_name.endswith('img'):
+                
+            elif image_name.endswith('bin') or image_name.endswith('img.gz'):
                 image = image_name
             
             else:
@@ -121,21 +121,21 @@ class Cpe_Cli(SSHLibrary):
         output=self.current.execute_command('cat /netbank/linkos_version')
         logger.info(output[0])
         
-        try:
-            version=output[0]
-            version=version.strip().split('\n')
-            #logger.info('version_list is %s ' % version)
-            dict={}
-            for line in version[:-1]:
-                idx = line.index(':')
-                key = line[:idx].strip()  #except the first ':', the other ':'(build time for example) belong to value
-                value = line[idx+1:].strip()
-                dict[key]=value
-            #current_version=dict['PLATFORM']+'-image-'+dict['OSVERSION']+'-'+dict['BUILD_COOKIE']
-            #logger.info('current image version is: %s' % current_version)
-        except Exception as e:
-            logger.warn(e)
-        return dict
+        # try:
+        #     version=output[0]
+        #     version=version.strip().split('\n')
+        #     #logger.info('version_list is %s ' % version)
+        #     dict={}
+        #     for line in version[:-1]:
+        #         idx = line.index(':')
+        #         key = line[:idx].strip()  #except the first ':', the other ':'(build time for example) belong to value
+        #         value = line[idx+1:].strip()
+        #         dict[key]=value
+        #     #current_version=dict['PLATFORM']+'-image-'+dict['OSVERSION']+'-'+dict['BUILD_COOKIE']
+        #     #logger.info('current image version is: %s' % current_version)
+        # except Exception as e:
+        #     logger.warn(e)
+        # return dict
 
 
     
@@ -143,6 +143,48 @@ class Cpe_Cli(SSHLibrary):
         """Check image version after upgrade cpe"""
         pass
 
+
+    def download_image(self,*image_list):
+        """Download image.zip from image server http://172.31.25.77:8880/zip,
+        specific used for upgrade via nms"""
+        
+        images = []
+        if not image_list:
+            logger.info('No image, upgrade will not handle')
+
+        else:            
+            for image_name in image_list:
+                image_name = image_name.strip()
+
+                if not image_name:
+                    continue
+
+                elif image_name == 'E201' or image_name == 'V501':
+                    image_name = self._get_latest_image(image_name,image_dir="zip")
+                
+                if image_name.endswith('.zip'):     #include the return of get_latest_image
+                    images.append(image_name)
+                
+                else:
+                    logger.warn('IMAGE %s is illegal!' % image_name)
+                    raise AssertionError('IMAGE error')
+                
+                
+            for image in images:   
+                url = 'http://172.31.25.77:8880/zip/'+image
+                logger.info('image_url is: %s' % url)
+
+                cmd = 'wget -P ~/Downloads %s' % url
+                status,output = subprocess.getstatusoutput(cmd)
+                if status:
+                    logger.warn("Download image fail!")
+                    logger.warn(output)
+                    raise AssertionError('Download image error')
+                else:
+                    logger.info(output)
+        return images
+           
+                
 
 
     def clean_image(self):
@@ -179,6 +221,7 @@ class Cpe_Cli(SSHLibrary):
             return inet.group().split(' ')[1]
         else:
             logger.warn('Can not get ip address for interface %s' % interface)
+            return False
 
 
     def reset_rpi_interface_ip(self,interface='eth0'):
@@ -194,9 +237,10 @@ class Cpe_Cli(SSHLibrary):
         self.current.execute_command('ifconfig %s down' % interface)
         
         for index in range(10):
+            time.sleep(1)
             output = self.current.execute_command('ifconfig %s' % interface)
             inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
-            time.sleep(1)
+            
             if inet:
                 logger.warn('<DOWN LOOP %s> Fail to down interface %s!' % (index,interface))
                 continue
@@ -206,10 +250,11 @@ class Cpe_Cli(SSHLibrary):
 
         self.current.execute_command('ifconfig %s up' % interface)
         if not inet:
-            for i in range(10):                
+            for i in range(10):
+                time.sleep(1)                
                 output = self.current.execute_command('ifconfig %s' % interface)
                 inet = re.search(r'inet \d+.\d+.\d+.\d+',output[0])
-                time.sleep(1)
+                
                 if inet:
                     logger.info('<UP LOOP %s> interface %s is up' % (i,interface))
                     ip = inet.group().split(' ')[1]
@@ -226,8 +271,10 @@ class Cpe_Cli(SSHLibrary):
                         logger.warn('Ping br-lan %s fail, re-process reset %s' % (br_lan,interface))
                         self.reset_rpi_interface_ip(interface)
                     break
-                else:
+                else:                    
                     logger.warn('<UP LOOP %s> interface %s reset fail!' % (i,interface))
+                    logger.debug(output)
+                    time.sleep(1)
                     continue
     
     def _get_br_lan(self):

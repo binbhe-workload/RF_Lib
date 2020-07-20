@@ -17,7 +17,6 @@ class API_Test_Lib(object):
 
     
     def __init__(self):
-        #warnings.filterwarnings("ignore")
         self._user = None
         self._password = None
         self.cookie = None
@@ -32,7 +31,6 @@ class API_Test_Lib(object):
         self._ssl_verify = False      # default as true
         self._device_mgmt_id =  None
         self._current_cpe_id = None
-        #self._imapObj = ImapLibrary()    # Instantiate the Imap library clas
 
 
 
@@ -117,8 +115,6 @@ class API_Test_Lib(object):
         
         coki = self._get_cookie(user, pwd, url= self.base_url)
         logger.console('cookie =  %s'% (coki))
-
-
         
         #tok = self._get_csrf_token()
         #logger.info('token =   %s'% (tok))
@@ -159,29 +155,18 @@ class API_Test_Lib(object):
 
         ## build the request headers,
         post_headers = self._build_headers_by_content_type(content_type)
-        
-        '''
-        if len(files_dict) ==0:
-            files = {}
-        
-        try:
-            if type(payload)!=str:
-                payload=str(payload)
-                resp=self._session.post(uri,data=payload,  headers=post_headers,files=files,verify=self._ssl_verify,timeout=timeout_inout,allow_redirects=allow_redirects)
-            else:
-                # There are file(s) for uploading with this post request
-                resp=self._post_multiple_multipart_encoded_files(uri, files_dict)
-        except Exception as e:
-            logger.warn(str(e))
-        '''
+       
         files=files_dict
         
         try:
             if payload!=None and type(payload)!=str:
                 payload=json.dumps(payload)
-            resp=self._session.post(uri,data=payload, headers=post_headers,files=files,verify=self._ssl_verify,timeout=timeout_inout,allow_redirects=allow_redirects)
+                resp=self._session.post(uri,data=payload, headers=post_headers,files=files,verify=self._ssl_verify,timeout=timeout_inout,allow_redirects=allow_redirects)
+            # else:
+            #     # There are file(s) for uploading with this post request
+            #     resp=self.post_multiple_multipart_encoded_files(uri, files_dict)
         except Exception as e:
-            logger.warn(str(e))
+            logger.warn(e)
 
         if resp.status_code not in (200, 201):
         #rif resp.status_code != expected_status_code:
@@ -235,8 +220,6 @@ class API_Test_Lib(object):
 
         uri = self._get_url(resource)
         logger.info(uri)
-        #headers=self._headers
-        #logger.info(headers)
 
         try:
             resp = self._session.get(uri,
@@ -364,52 +347,40 @@ class API_Test_Lib(object):
 
 
 
-    def post_multipart_encoded_files_toolbelt(self,resource,file_paths_dict):
-        """
-            Uploading multiple files in a single request using  requests-toolbelt modul
+    def post_multipart_encoded_files_toolbelt(self,resource,**file_paths_dict):
+        """Uploading multiple files in a single request using  requests-toolbelt modul
+
         :param resource: resource specified by swaggeer like: /proxy/major/api/equipment/import
-        :param file_paths_dict: A dictionary of file-full-path-name/content-type: suc has:
-                file_paths_dict = {'file_xml.xlsx': 'text/xlsx', 'file_text.txt': 'plain/text','logo.png': 'image/png'}
+
+        :param file_paths_dict: A dictionary of file-full-path-name/content-type: such as:
+                ${CURDIR}/file_xml.xlsx=text/xlsx or ${CURDIR}/logo.png=image/png
+        
         :return: http Post response
 
             The Example with only one XML file:
-                ## Create a  dictionary of file-full-path-name/content-type
-            | ${file_paths_dict} = |   Create Dictionary  ${MAP_XML_FILE_PATH}/${filename}=text/xlsx |
-            | ${resp}= |  Post_Multipart_Encoded_Files_Toolbelt | /proxy/major/api/equipment/import | ${file_paths_dict} |
+
+            ## Create a  dictionary of file-full-path-name/content-type            
+            | ${resp}= |  Post_Multipart_Encoded_Files_Toolbelt | /proxy/major/api/equipment/import | ${CURDIR}/${filename}=text/xlsx |
         """
 
         #raise   AssertionError("This keyword is NOT supported with a server error 500. Please use the keyword:File Upload Post")
         uri = self._get_url(resource)
         
         # Convert dictionary to list of tuples.
-        file_paths_list = list(file_paths_dict.items())
-        filename=os.path.basename(file_paths_list[0][0])
-        file_dict=file_paths_list[0][0]
-        file_type=file_paths_list[0][1]
+        file_dict = list(file_paths_dict.keys())[0]
+        file_type = file_paths_dict[file_dict]
+        file_dict = file_dict.strip()
+        file_type = file_type.strip()
+        filename = os.path.basename(file_dict)
         fields_input={"file":(filename,open(file_dict,"rb"),file_type)}
 
         m = MultipartEncoder(fields=fields_input)
         
         post_headers = self._build_headers_by_content_type(m.content_type)
 
-        '''
-        #post_headers = self.get_last_request_headers()
-        post_headers=self.get_last_request_headers()
-        post_headers["Content-Type"] = m.content_type
-
-        ## For Debugging only
-        last_response_headers = self.get_last_response_headers()
-        last_response_cookies =  self._session.last_resp.cookies      #A CookieJar of Cookies the server sent back.
-
-        cookies_jar = self._session.cookies
-        cookies_dict = requests.utils.dict_from_cookiejar(cookies_jar)
-    
-        post_headers["Cookie"] = cookies_dict
-        '''
-
         resp = self._session.post(uri, data=m,
                             verify=self._ssl_verify,
-                            headers=post_headers )
+                            headers=post_headers)
         
         self._headers['Content-Type']='application/json;charset=utf-8'
         if resp.status_code not in (200, 201):
@@ -422,7 +393,33 @@ class API_Test_Lib(object):
         return   resp
 
 
+    def post_file_upload(self,resource,**file_paths_dict):
+        """Post image file"""
+        uri = self._get_url(resource)
 
+        file_dict = list(file_paths_dict.keys())[0]
+        file_type = file_paths_dict[file_dict]
+        file_dict = file_dict.strip()
+        file_type = file_type.strip()
+        filename = os.path.basename(file_dict)
+        logger.info(filename,file_type)        
+
+        files = {"bizType":"1","file":(filename,open(file_dict,"rb"),file_type)}
+        logger.info(files)
+        m = MultipartEncoder(fields=files)
+
+        post_headers = self._build_headers_by_content_type(m.content_type)
+        
+        resp = self._session.post(uri,data=m,headers=post_headers)
+        logger.info('headers:%s'%self._headers)
+        self._headers['Content-Type']='application/json;charset=utf-8'
+
+        if resp.status_code not in (200,201):
+            logger.warn(resp.headers)
+            logger.warn(resp.content)
+        if type(resp.content) == bytes:
+            jdata = resp.json()   #json.loads(resp.content), the json-encoded content of a response, if any.
+            return  (resp.status_code, jdata)
 
     def get_id_by_other_message(self,jsondata,msg,msg_value):
 
@@ -574,6 +571,7 @@ class API_Test_Lib(object):
     def _post_multiple_multipart_encoded_files(self,uri, files_dict):
         pass
 
+
     def _load_json_file(self,file_path):
         """Load a json file to a python dict"""
         with open(file_path,'r') as f:
@@ -713,7 +711,7 @@ class API_Test_Lib(object):
                         self.update_jsondata_by_key_value_pair(content,key,value,main_key)
         return tmp
             
-    def get_value_from_jsondata(self,jsondata,key,value=[]):
+    def get_value_from_jsondata(self,jsondata,key,all=False,value=[]):
         """Get value from jsondata by given key
 
         example::
@@ -732,7 +730,10 @@ class API_Test_Lib(object):
                 if isinstance(v,(list,tuple)):
                     for content in v:
                         self.get_value_from_jsondata(content,key,value)
-        return value[-1]
+        if all:
+            return value
+        else:
+            return value[-1]
 
     def update_jsondata_by_del_rules(self,jsondata,*args):
         """Update jsondata by delete key/value pairs with given keys
@@ -874,7 +875,6 @@ class API_Test_Lib(object):
                 token={1}&cols=143&rows=7&sn={2}&account={3}&password={4}&socketUrl={5}
                 &protocol=https&EIO=3&transport=websocket'''.format(base_url,cookie,sn,account,passwd,base_url)
         return url
-
 
 
 

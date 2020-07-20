@@ -1,11 +1,10 @@
 *** Settings ***
-Test Setup        Initial_Env_Setup
-Default Tags      API
-Variables         ../API_Test_Lib/personal.py
+Default Tags      API    #Test Setup    Initial_Env_Setup
 Resource          ../API_Test_Resource.robot
 Library           ../API_Test_Lib/API_Test_Lib.py
 Library           Collections
 Library           String
+Variables         ../../sdwan-auto-case(tester_branch)/public/topo/tb.py
 
 *** Test Cases ***
 agents_management
@@ -53,6 +52,32 @@ pipeline_test
 clear_env
     ${del_status}    delete request    /proxy/major/api/equipment/
 
+upload_version
+    reload library    Api_Test_Lib
+    Create Api Test Environment    ${NMS.ADMIN_USERNAME}    ${NMS.ADMIN_PASSWORD}    ${NMS.URL}
+    ${status}    ${content}    Post file upload    proxy/major/api/file/upload    /home/sdwan/Downloads/E201-v3.2.4-3.4.0-3-g659b817-20200701_DEBUG.zip=application/zip
+    ${id}    get from dictionary    ${content}    id
+    ${extInfo}    get from dictionary    ${content}    extInfo
+    ${versionNumber}    get from dictionary    ${extInfo}    versionNumber
+    set to dictionary    ${extInfo}    image=${id}
+    ${version_existed}    run keyword and return status    list should contain value    ${version}    ${versionNumber}
+    run keyword unless    ${version_existed}    upload confirm    ${extInfo}
+    ${cpe_list}    create list    ${CPE1.SN}    ${CPE2.SN}
+    Create Api Test Environment    ${NMS.AGENT_USERNAME}    ${NMS.AGENT_PASSWORD}    ${NMS.URL}
+    ${payload}    create dictionary    snList=${cpe_list}    version=${versionNumber}
+    ${status}    ${batchUp}    post request    proxy/major/api/equipment/batchUp    payload=${payload}
+    Log    ${batchUp}
+    ${mainTaskId}    get from dictionary    ${batchUp}    mainTaskId
+    ${status}    ${jdata}    get request    proxy/configuration/api/device-config-histories?size=10&page=0&sort=id,desc&queryCondition=${mainTaskId}
+    Log    ${jdata}
+
+get versions
+    reload library    Api_Test_Lib
+    Create Api Test Environment    ${NMS.ADMIN_USERNAME}    ${NMS.ADMIN_PASSWORD}    ${NMS.URL}
+    ${status}    ${jdata}    get request    proxy/major/api/versions?size=999&sort=id,desc
+    ${version}    get value from jsondata    ${jdata}    versionNumber    all=${true}
+    Log    ${version}
+
 *** Keywords ***
 Get_equipment_info
     ${resource}    set variable    proxy/major/api/equipment?size=10&page=0&sort=id,desc&status.in=%E6%9C%AA%E5%88%86%E9%85%8D%E4%BB%A3%E7%90%86%E5%95%86
@@ -80,3 +105,8 @@ allocate equipment to agent
     ${payload}    Create Dictionary    agentId=369    equipmentIds=[${equipment_id}]
     ${status}    ${jdata}    put request    /proxy/major/api/equipment/distribute2Agent    ${payload}
     ${equipment_info}    Get equipment info
+
+upload confirm
+    [Arguments]    ${extInfo}
+    ${status}    ${jdata}    post request    proxy/major/api/versions    payload=${extInfo}
+    should be equal    ${status}    ${201}

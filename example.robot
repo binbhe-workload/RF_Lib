@@ -1,9 +1,11 @@
 *** Settings ***
 Resource          /git/RF_Lib/API_Test_Resource.robot
 Variables         /git/RF_Lib/API_Test_Lib/personal.py
-Library           /git/RF_Lib/Cpe_Cli.py
+Library           Cpe_Cli.py
 Library           Collections
 Library           /git/RF_Lib/API_Test_Lib/API_Test_Lib.py
+Resource          ../sdwan-auto-case(tester_branch)/resource/public_resource.robot
+Library           String
 
 *** Test Cases ***
 cpe parameter modify
@@ -15,3 +17,16 @@ cpe parameter modify
     ${payload}    update jsondata from jsonfile    ${file_path}    wan0    natEnable=${false}    mtu=1500
     cpe wan config modify    ${payload}
     active cpe config    ${cpe_id}
+
+test
+    clear console line    2075
+    console login    10.201.0.207    2075
+    ${ctl}    console exec cmd    swanctl --list-sa
+    ${route}    console exec cmd    route
+    ${ipsec}    console exec cmd    ipsec status
+    write    exit
+    Close Connection
+
+og
+    ${cpe_id}    set variable    1
+    log    {"equipmentId":"${cpe_id}"}
